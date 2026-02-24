@@ -215,6 +215,11 @@ Runtime control additions:
 - `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
 - `Tower Curves` panel: visualizes each tower's capability growth and cost growth across levels 1-50.
 
+Progress persistence:
+- Player progress now auto-saves continuously and on tab close.
+- Session identity is indexed by `homeland_sid` cookie, with client IP fallback if cookie is missing.
+- Data is stored server-side in `/Users/rc/Project/Homeland/.data/player-progress.json` and mirrored in browser `localStorage` as fallback.
+
 Run local web prototype:
 
 ```bash

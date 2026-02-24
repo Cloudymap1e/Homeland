@@ -74,8 +74,18 @@ const TOWER_RANGE_COLORS = {
   magic_wind: { fill: [137, 235, 255], edge: [199, 244, 255] },
   magic_lightning: { fill: [255, 215, 109], edge: [255, 237, 162] },
 };
+const PROGRESS_ENDPOINT = '/api/progress';
+const LOCAL_PROGRESS_KEY = 'homeland_progress_v1';
+const SAVE_DEBOUNCE_MS = 420;
+const PERIODIC_SAVE_MS = 1500;
+const PERSISTENCE_VERSION = 1;
 
 const visualEffects = [];
+let persistenceReady = false;
+let persistTimerId = null;
+let lastPersistedFingerprint = '';
+let nextPeriodicPersistAt = 0;
+let persistQueue = Promise.resolve();
 
 const terrainLayer = document.createElement('canvas');
 terrainLayer.width = canvas.width;
@@ -442,6 +452,211 @@ function stateLabel(stateId) {
   return STATE_LABELS[stateId] || stateId;
 }
 
+function readLocalProgress() {
+  try {
+    const raw = localStorage.getItem(LOCAL_PROGRESS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalProgress(payload) {
+  try {
+    localStorage.setItem(LOCAL_PROGRESS_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore local storage failures (private mode/quota).
+  }
+}
+
+function createProgressPayload() {
+  return {
+    version: PERSISTENCE_VERSION,
+    updatedAt: Date.now(),
+    autoContinueEnabled,
+    selectedTowerId,
+    selectedCurveTowerId,
+    reportPanelVisible,
+    curvePanelVisible,
+    game: game.exportState(),
+  };
+}
+
+function createProgressFingerprint(payload) {
+  const stable = {
+    autoContinueEnabled: payload.autoContinueEnabled,
+    selectedTowerId: payload.selectedTowerId,
+    selectedCurveTowerId: payload.selectedCurveTowerId,
+    reportPanelVisible: payload.reportPanelVisible,
+    curvePanelVisible: payload.curvePanelVisible,
+    game: payload.game,
+  };
+  return JSON.stringify(stable);
+}
+
+async function fetchServerProgress() {
+  try {
+    const response = await fetch(PROGRESS_ENDPOINT, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = await response.json();
+    if (!body || typeof body !== 'object') {
+      return null;
+    }
+    return body.progress && typeof body.progress === 'object' ? body.progress : null;
+  } catch {
+    return null;
+  }
+}
+
+async function persistServerProgress(payload, keepalive = false) {
+  const response = await fetch(PROGRESS_ENDPOINT, {
+    method: 'PUT',
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    keepalive,
+    body: JSON.stringify(payload),
+  });
+  return response.ok;
+}
+
+function applyPersistedProgress(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  if (!payload.game || typeof payload.game !== 'object') {
+    return false;
+  }
+  const imported = game.importState(payload.game);
+  if (!imported) {
+    return false;
+  }
+
+  if (typeof payload.selectedTowerId === 'string' && payload.selectedTowerId in TOWER_CONFIG) {
+    selectedTowerId = payload.selectedTowerId;
+  }
+  if (typeof payload.selectedCurveTowerId === 'string' && payload.selectedCurveTowerId in TOWER_CONFIG) {
+    selectedCurveTowerId = payload.selectedCurveTowerId;
+  }
+  autoContinueEnabled = Boolean(payload.autoContinueEnabled);
+  reportPanelVisible = payload.reportPanelVisible !== false;
+  curvePanelVisible = payload.curvePanelVisible !== false;
+
+  selectedSlotId = null;
+  slotPopoutNotice = '';
+  rangePreviewTowerId = null;
+  closeSlotPopout();
+  visualEffects.length = 0;
+  fastForwardUntilMs = 0;
+  simTime = 0;
+  lastTime = performance.now();
+
+  elMapSelect.value = game.mapId;
+  elCurveTower.value = selectedCurveTowerId;
+  markCurveDirty();
+  setPanelVisibility('report', reportPanelVisible);
+  setPanelVisibility('curve', curvePanelVisible);
+  buildStaticMapLayers();
+  updateMapMeta();
+  updateHud();
+  return true;
+}
+
+function pickNewestProgress(remote, local) {
+  const remoteTs = Number(remote?.updatedAt) || 0;
+  const localTs = Number(local?.updatedAt) || 0;
+  if (!remote && !local) {
+    return null;
+  }
+  if (!remote) {
+    return local;
+  }
+  if (!local) {
+    return remote;
+  }
+  return remoteTs >= localTs ? remote : local;
+}
+
+async function hydrateProgress() {
+  const [remote, local] = await Promise.all([fetchServerProgress(), Promise.resolve(readLocalProgress())]);
+  const payload = pickNewestProgress(remote, local);
+  if (!payload) {
+    return;
+  }
+  if (!applyPersistedProgress(payload)) {
+    return;
+  }
+  const fingerprint = createProgressFingerprint(payload);
+  lastPersistedFingerprint = fingerprint;
+}
+
+async function persistProgressNow(keepalive = false) {
+  const payload = createProgressPayload();
+  const fingerprint = createProgressFingerprint(payload);
+  if (fingerprint === lastPersistedFingerprint) {
+    return;
+  }
+
+  writeLocalProgress(payload);
+  try {
+    await persistServerProgress(payload, keepalive);
+    lastPersistedFingerprint = fingerprint;
+  } catch {
+    // Keep local backup if network persistence is unavailable.
+  }
+}
+
+function queueProgressPersist(keepalive = false) {
+  if (!persistenceReady) {
+    return;
+  }
+  persistQueue = persistQueue
+    .then(() => persistProgressNow(keepalive))
+    .catch(() => {});
+}
+
+function scheduleProgressPersist() {
+  if (!persistenceReady || persistTimerId !== null) {
+    return;
+  }
+  persistTimerId = window.setTimeout(() => {
+    persistTimerId = null;
+    queueProgressPersist(false);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function flushProgressOnUnload() {
+  if (!persistenceReady) {
+    return;
+  }
+  const payload = createProgressPayload();
+  writeLocalProgress(payload);
+  const body = JSON.stringify(payload);
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body], { type: 'application/json' });
+    navigator.sendBeacon(PROGRESS_ENDPOINT, blob);
+    return;
+  }
+  fetch(PROGRESS_ENDPOINT, {
+    method: 'POST',
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    keepalive: true,
+    body,
+  }).catch(() => {});
+}
+
 function markCurveDirty() {
   curveDirty = true;
 }
@@ -754,6 +969,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
             markCurveDirty();
           }
           updateHud();
+          scheduleProgressPersist();
         },
         disabled
       );
@@ -793,6 +1009,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
           const result = game.upgradeTower(slot.id);
           slotPopoutNotice = result.ok ? '' : result.error;
           updateHud();
+          scheduleProgressPersist();
         },
         disabled
       )
@@ -1604,6 +1821,10 @@ function gameLoop(now) {
 
   render();
   updateHud();
+  if (persistenceReady && now >= nextPeriodicPersistAt) {
+    nextPeriodicPersistAt = now + PERIODIC_SAVE_MS;
+    queueProgressPersist(false);
+  }
 
   requestAnimationFrame(gameLoop);
 }
@@ -1631,6 +1852,7 @@ function loadSelectedMap() {
   buildStaticMapLayers();
   updateMapMeta();
   updateHud();
+  scheduleProgressPersist();
 }
 
 function triggerFastForwardWave() {
@@ -1661,6 +1883,7 @@ function maybeAutoAdvanceMap() {
   elMapSelect.value = game.mapId;
   buildStaticMapLayers();
   updateMapMeta();
+  scheduleProgressPersist();
 }
 
 function handleAutoContinue() {
@@ -1706,40 +1929,48 @@ document.addEventListener('pointerdown', (event) => {
 btnStartWave.addEventListener('click', () => {
   game.startNextWave();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleSpeed.addEventListener('click', () => {
   game.setSpeed(game.speed === 1 ? 2 : 1);
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnFastForwardWave.addEventListener('click', () => {
   triggerFastForwardWave();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleAutoContinue.addEventListener('click', () => {
   autoContinueEnabled = !autoContinueEnabled;
   handleAutoContinue();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleReportPanel.addEventListener('click', () => {
   setPanelVisibility('report', !reportPanelVisible);
+  scheduleProgressPersist();
 });
 
 btnToggleCurvePanel.addEventListener('click', () => {
   setPanelVisibility('curve', !curvePanelVisible);
+  scheduleProgressPersist();
 });
 
 btnHideReportPanel.addEventListener('click', (event) => {
   event.stopPropagation();
   setPanelVisibility('report', false);
+  scheduleProgressPersist();
 });
 
 btnHideCurvePanel.addEventListener('click', (event) => {
   event.stopPropagation();
   setPanelVisibility('curve', false);
+  scheduleProgressPersist();
 });
 
 btnReset.addEventListener('click', () => {
@@ -1751,6 +1982,7 @@ btnReset.addEventListener('click', () => {
   fastForwardUntilMs = 0;
   buildStaticMapLayers();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnLoadMap.addEventListener('click', loadSelectedMap);
@@ -1760,6 +1992,7 @@ elCurveTower.addEventListener('change', () => {
   selectedCurveTowerId = elCurveTower.value;
   markCurveDirty();
   updateCurveVisualization(true);
+  scheduleProgressPersist();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -1785,12 +2018,33 @@ window.addEventListener('resize', () => {
   clampHudWindowsToViewport();
 });
 
-rebuildMapSelect();
-rebuildCurveTowerSelect();
-resizeCanvasToViewport();
-makeWindowDraggable(elResultWindow, elResultHandle);
-makeWindowDraggable(elCurveWindow, elCurveHandle);
-updatePanelButtons();
-updateMapMeta();
-updateHud();
-requestAnimationFrame(gameLoop);
+window.addEventListener('beforeunload', flushProgressOnUnload);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    flushProgressOnUnload();
+  }
+});
+
+async function bootstrap() {
+  rebuildMapSelect();
+  rebuildCurveTowerSelect();
+  makeWindowDraggable(elResultWindow, elResultHandle);
+  makeWindowDraggable(elCurveWindow, elCurveHandle);
+  updatePanelButtons();
+  updateMapMeta();
+  updateHud();
+
+  await hydrateProgress();
+
+  resizeCanvasToViewport();
+  clampHudWindowsToViewport();
+  updateMapMeta();
+  updateHud();
+
+  persistenceReady = true;
+  nextPeriodicPersistAt = performance.now() + PERIODIC_SAVE_MS;
+  queueProgressPersist(false);
+  requestAnimationFrame(gameLoop);
+}
+
+bootstrap();
