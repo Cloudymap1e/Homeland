@@ -49,14 +49,16 @@ function addTower(game, towerId, level, distance) {
 
 test('build and upgrade deduct coins correctly', () => {
   const game = new HomelandGame();
+  const level1Cost = TOWER_CONFIG.arrow.levels[0].cost;
+  const level2Cost = TOWER_CONFIG.arrow.levels[1].cost;
 
   const buildRes = game.buildTower('s01', 'arrow');
   assert.equal(buildRes.ok, true);
-  assert.equal(game.coins, 9500);
+  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost);
 
   const upRes = game.upgradeTower('s01');
   assert.equal(upRes.ok, true);
-  assert.ok(game.coins < 9500);
+  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost - level2Cost);
 
   const tower = game.getTower('s01');
   assert.equal(tower.level, 2);
