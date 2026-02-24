@@ -66,6 +66,11 @@ export class HomelandGame {
     this.lastAttacks = [];
     this.result = null;
     this.events = [];
+    this.stats = {
+      spawned: 0,
+      killed: 0,
+      leaked: 0,
+    };
   }
 
   setSpeed(multiplier) {
@@ -189,6 +194,7 @@ export class HomelandGame {
       slowDurationLeft: 0,
     });
     this.nextEnemyId += 1;
+    this.stats.spawned += 1;
   }
 
   updateEffects(dt) {
@@ -228,6 +234,7 @@ export class HomelandGame {
       if (enemy.hp <= 0) {
         this.coins += enemy.coinReward;
         this.xp += enemy.xpReward;
+        this.stats.killed += 1;
         return false;
       }
       return true;
@@ -392,6 +399,7 @@ export class HomelandGame {
       if (enemy.distance >= this.pathInfo.length) {
         this.coins -= MAP_CONFIG.leakPenalty.coins;
         this.xp = Math.max(0, this.xp - MAP_CONFIG.leakPenalty.xp);
+        this.stats.leaked += 1;
       } else {
         survivors.push(enemy);
       }
@@ -438,6 +446,9 @@ export class HomelandGame {
       boatsLeft: this.spawnQueue.length + this.enemies.length,
       result: this.result,
       nextMapUnlocked: this.xp >= MAP_CONFIG.unlockRequirement.minXp,
+      leaked: this.stats.leaked,
+      killed: this.stats.killed,
+      spawned: this.stats.spawned,
     };
   }
 
