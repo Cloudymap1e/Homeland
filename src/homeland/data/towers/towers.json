@@ -1,0 +1,52 @@
+[
+  {
+    "tower_id": "arrow",
+    "display_name": "Arrow Tower",
+    "effect_type": "physical",
+    "levels": [
+      { "level": 1, "cost": 500, "stats": { "damage": 32, "range": 2.8, "attack_speed": 1.10 } },
+      { "level": 2, "cost": 450, "stats": { "damage": 48, "range": 3.0, "attack_speed": 1.20 } },
+      { "level": 3, "cost": 700, "stats": { "damage": 70, "range": 3.2, "attack_speed": 1.25 } }
+    ]
+  },
+  {
+    "tower_id": "bone",
+    "display_name": "Bone Tower",
+    "effect_type": "physical",
+    "levels": [
+      { "level": 1, "cost": 700, "stats": { "damage": 95, "range": 2.4, "attack_speed": 0.55 } },
+      { "level": 2, "cost": 600, "stats": { "damage": 130, "range": 2.5, "attack_speed": 0.60 } },
+      { "level": 3, "cost": 900, "stats": { "damage": 180, "range": 2.6, "attack_speed": 0.65 } }
+    ]
+  },
+  {
+    "tower_id": "magic_fire",
+    "display_name": "Magic Tower - Fire",
+    "effect_type": "fire",
+    "levels": [
+      { "level": 1, "cost": 800, "stats": { "damage": 26, "range": 2.7, "attack_speed": 0.90, "burn_dps": 12, "burn_duration": 2.5 } },
+      { "level": 2, "cost": 700, "stats": { "damage": 34, "range": 2.9, "attack_speed": 0.95, "burn_dps": 18, "burn_duration": 2.8 } },
+      { "level": 3, "cost": 1000, "stats": { "damage": 45, "range": 3.0, "attack_speed": 1.00, "burn_dps": 24, "burn_duration": 3.0 } }
+    ]
+  },
+  {
+    "tower_id": "magic_wind",
+    "display_name": "Magic Tower - Wind",
+    "effect_type": "wind",
+    "levels": [
+      { "level": 1, "cost": 760, "stats": { "damage": 20, "range": 2.9, "attack_speed": 0.95, "slow_percent": 22, "slow_duration": 1.8 } },
+      { "level": 2, "cost": 650, "stats": { "damage": 28, "range": 3.0, "attack_speed": 1.00, "slow_percent": 28, "slow_duration": 2.0 } },
+      { "level": 3, "cost": 980, "stats": { "damage": 36, "range": 3.2, "attack_speed": 1.05, "slow_percent": 34, "slow_duration": 2.2 } }
+    ]
+  },
+  {
+    "tower_id": "magic_lightning",
+    "display_name": "Magic Tower - Lightning",
+    "effect_type": "lightning",
+    "levels": [
+      { "level": 1, "cost": 900, "stats": { "damage": 58, "range": 2.8, "attack_speed": 0.80, "chain_count": 1, "chain_falloff": 35 } },
+      { "level": 2, "cost": 800, "stats": { "damage": 78, "range": 3.0, "attack_speed": 0.85, "chain_count": 1, "chain_falloff": 30 } },
+      { "level": 3, "cost": 1200, "stats": { "damage": 105, "range": 3.1, "attack_speed": 0.90, "chain_count": 1, "chain_falloff": 25 } }
+    ]
+  }
+]

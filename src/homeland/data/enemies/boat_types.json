@@ -1,0 +1,5 @@
+[
+  { "enemy_type": "scout", "hp": 180, "speed": 1.35, "coin_reward": 70, "xp_reward": 6 },
+  { "enemy_type": "raider", "hp": 320, "speed": 1.00, "coin_reward": 105, "xp_reward": 10 },
+  { "enemy_type": "barge", "hp": 560, "speed": 0.78, "coin_reward": 160, "xp_reward": 16 }
+]

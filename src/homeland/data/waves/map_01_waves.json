@@ -1,0 +1,7 @@
+[
+  { "wave_id": 1, "spawn_interval": 1.00, "composition": { "scout": 5, "raider": 5 } },
+  { "wave_id": 2, "spawn_interval": 0.95, "composition": { "scout": 5, "raider": 6, "barge": 1 } },
+  { "wave_id": 3, "spawn_interval": 0.90, "composition": { "scout": 6, "raider": 6, "barge": 2 } },
+  { "wave_id": 4, "spawn_interval": 0.85, "composition": { "scout": 8, "raider": 6, "barge": 2 } },
+  { "wave_id": 5, "spawn_interval": 0.80, "composition": { "scout": 8, "raider": 8, "barge": 2 } }
+]
