@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+const BASE_URL = process.env.HOMELAND_E2E_BASE_URL || 'http://127.0.0.1:4173';
+
 test('slot popout tower button responds to real click', async ({ page }) => {
-  await page.goto('http://127.0.0.1:4173');
+  await page.goto(BASE_URL);
 
   await page.locator('#reset').click();
 
