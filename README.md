@@ -194,7 +194,13 @@ These numbers should be moved to config and tuned after first playable tests.
 - Boss fleets and elite ships.
 - Campaign map progression with branching paths.
 
+## Implementation Documents
+
+- Design spec: `/Users/rc/Project/Homeland/docs/prototype-design.md`
+- Engineering plan: `/Users/rc/Project/Homeland/docs/action-plan.md`
+- Sprint task list: `/Users/rc/Project/Homeland/docs/task-list.md`
+
 ## Current Status
 
-This repository currently contains planning/foundation documents.
-Implementation should begin from the MVP plan above.
+This repository now includes concrete prototype planning documents.
+Next step is to execute the task list in order and ship the first playable map.
