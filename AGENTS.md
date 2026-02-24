@@ -132,6 +132,9 @@ Use a data-driven architecture so balancing and content expansion are easy.
   - Map 1 clear rate: ~90%
   - Map 2 clear rate: ~85%
   - Map 3 clear rate: ~80%
+- Prefer enemy-side scaling for progression updates:
+  - adjust enemy HP/speed/rewards, map `enemyScale`, leak penalties, and wave composition first;
+  - avoid frequent tower-curve rewrites unless a tower role is fundamentally broken.
 - Use:
   - `npm run balance:sim` for full search + diversity + OAT,
   - `npm run balance:diversity` for faster no-search diversity/OAT reruns.

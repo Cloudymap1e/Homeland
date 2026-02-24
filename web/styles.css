@@ -108,13 +108,27 @@ button.active {
   padding: 20px;
 }
 
-canvas {
+#game {
   width: min(100%, 1100px);
   height: auto;
   border-radius: 16px;
   border: 1px solid #2c3e57;
   background: linear-gradient(180deg, #204a35 0%, #153228 100%);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+#curve-chart {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid #2a3b55;
+  background: linear-gradient(180deg, #101b2d 0%, #0c1423 100%);
+  box-shadow: inset 0 0 0 1px rgba(111, 167, 226, 0.1);
+}
+
+.curve-summary {
+  min-height: 98px;
+  white-space: pre-line;
 }
 
 @media (max-width: 980px) {

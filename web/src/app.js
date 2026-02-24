@@ -15,6 +15,10 @@ const elSelection = document.getElementById('selection');
 const elTowerButtons = document.getElementById('tower-buttons');
 const elMapSelect = document.getElementById('map-select');
 const elMapMeta = document.getElementById('map-meta');
+const elCurveTower = document.getElementById('curve-tower');
+const curveCanvas = document.getElementById('curve-chart');
+const curveCtx = curveCanvas.getContext('2d');
+const elCurveSummary = document.getElementById('curve-summary');
 
 const btnStartWave = document.getElementById('start-wave');
 const btnToggleSpeed = document.getElementById('toggle-speed');
@@ -26,17 +30,26 @@ const btnLoadMap = document.getElementById('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
 let selectedTowerId = 'arrow';
+let selectedCurveTowerId = 'arrow';
 let selectedSlotId = null;
 let lastTime = performance.now();
 let simTime = 0;
 let autoContinueEnabled = false;
 let fastForwardUntilMs = 0;
+let curveDirty = true;
 
 const SLOT_RADIUS = 16;
 const WORLD_SCALE = 10;
 const EFFECT_LIMIT = 520;
 const FAST_FORWARD_STEP_DT = 0.2;
 const FAST_FORWARD_STEPS_PER_FRAME = 120;
+const CURVE_COLORS = {
+  damage: '#ff875f',
+  dps: '#f6c65b',
+  range: '#6fd2ff',
+  special: '#8be39f',
+  cost: '#c5a8ff',
+};
 
 const visualEffects = [];
 
@@ -279,6 +292,9 @@ function rebuildTowerButtons() {
     }
     btn.addEventListener('click', () => {
       selectedTowerId = tower.id;
+      selectedCurveTowerId = tower.id;
+      elCurveTower.value = selectedCurveTowerId;
+      markCurveDirty();
       rebuildTowerButtons();
       updateSelectionText();
     });
@@ -306,6 +322,166 @@ function updateMapMeta() {
     `Unlock XP: ${map.unlockRequirement.minXp}`,
     `Tower cap: ${CAMPAIGN_INFO.maxTowerLevel}`,
   ].join(' | ');
+}
+
+function markCurveDirty() {
+  curveDirty = true;
+}
+
+function specialCurveValue(tower, levelCfg) {
+  if (tower.effectType === 'bomb') return levelCfg.splashRadius || 0;
+  if (tower.effectType === 'fire') return levelCfg.fireballDps || 0;
+  if (tower.effectType === 'wind') return levelCfg.slowPercent || 0;
+  if (tower.effectType === 'lightning') return levelCfg.chainCount || 0;
+  return 0;
+}
+
+function specialCurveLabel(tower) {
+  if (tower.effectType === 'bomb') return 'Splash Radius';
+  if (tower.effectType === 'fire') return 'Fireball DPS';
+  if (tower.effectType === 'wind') return 'Slow Percent';
+  if (tower.effectType === 'lightning') return 'Chain Count';
+  return 'Special';
+}
+
+function towerCurveData(towerId) {
+  const tower = TOWER_CONFIG[towerId];
+  const levels = tower.levels.map((_, index) => index + 1);
+  const damage = tower.levels.map((levelCfg) => levelCfg.damage);
+  const dps = tower.levels.map((levelCfg) => levelCfg.damage * levelCfg.attackSpeed);
+  const range = tower.levels.map((levelCfg) => levelCfg.range);
+  const special = tower.levels.map((levelCfg) => specialCurveValue(tower, levelCfg));
+  const cost = tower.levels.map((levelCfg) => levelCfg.cost);
+  return { tower, levels, damage, dps, range, special, cost };
+}
+
+function drawCurvePanel(panel, title) {
+  curveCtx.strokeStyle = 'rgba(120, 164, 218, 0.3)';
+  curveCtx.lineWidth = 1;
+  curveCtx.strokeRect(panel.x, panel.y, panel.w, panel.h);
+
+  curveCtx.fillStyle = '#c5d9f5';
+  curveCtx.font = '12px "Segoe UI", sans-serif';
+  curveCtx.fillText(title, panel.x, panel.y - 6);
+
+  curveCtx.strokeStyle = 'rgba(120, 164, 218, 0.15)';
+  for (let i = 1; i <= 4; i += 1) {
+    const y = panel.y + (panel.h * i) / 4;
+    curveCtx.beginPath();
+    curveCtx.moveTo(panel.x, y);
+    curveCtx.lineTo(panel.x + panel.w, y);
+    curveCtx.stroke();
+  }
+}
+
+function drawCurveSeries(panel, values, color, maxValue) {
+  if (values.length < 2) return;
+  const safeMax = maxValue > 0 ? maxValue : 1;
+  curveCtx.strokeStyle = color;
+  curveCtx.lineWidth = 2;
+  curveCtx.beginPath();
+  for (let i = 0; i < values.length; i += 1) {
+    const x = panel.x + (panel.w * i) / (values.length - 1);
+    const y = panel.y + panel.h - (Math.max(0, values[i]) / safeMax) * panel.h;
+    if (i === 0) {
+      curveCtx.moveTo(x, y);
+    } else {
+      curveCtx.lineTo(x, y);
+    }
+  }
+  curveCtx.stroke();
+}
+
+function drawCurveLegend(entries, startX, y) {
+  let x = startX;
+  for (const entry of entries) {
+    curveCtx.fillStyle = entry.color;
+    curveCtx.fillRect(x, y - 8, 8, 8);
+    curveCtx.fillStyle = '#d9e7ff';
+    curveCtx.font = '11px "Segoe UI", sans-serif';
+    curveCtx.fillText(entry.label, x + 12, y);
+    x += 64;
+  }
+}
+
+function updateCurveVisualization(force = false) {
+  if (!force && !curveDirty) {
+    return;
+  }
+  const towerId = selectedCurveTowerId in TOWER_CONFIG ? selectedCurveTowerId : selectedTowerId;
+  const data = towerCurveData(towerId);
+  const { tower, levels, damage, dps, range, special, cost } = data;
+
+  curveCtx.clearRect(0, 0, curveCanvas.width, curveCanvas.height);
+  curveCtx.fillStyle = '#0e1829';
+  curveCtx.fillRect(0, 0, curveCanvas.width, curveCanvas.height);
+
+  const topPanel = { x: 30, y: 24, w: 236, h: 84 };
+  const bottomPanel = { x: 30, y: 136, w: 236, h: 62 };
+
+  drawCurvePanel(topPanel, 'Capability Growth (normalized)');
+  drawCurvePanel(bottomPanel, 'Cost Growth');
+
+  drawCurveSeries(topPanel, damage, CURVE_COLORS.damage, Math.max(...damage));
+  drawCurveSeries(topPanel, dps, CURVE_COLORS.dps, Math.max(...dps));
+  drawCurveSeries(topPanel, range, CURVE_COLORS.range, Math.max(...range));
+  drawCurveSeries(topPanel, special, CURVE_COLORS.special, Math.max(...special));
+
+  const costMax = Math.max(...cost);
+  drawCurveSeries(bottomPanel, cost, CURVE_COLORS.cost, costMax);
+  curveCtx.fillStyle = '#c3d6f5';
+  curveCtx.font = '10px "Segoe UI", sans-serif';
+  curveCtx.fillText(`max ${Math.round(costMax)}`, bottomPanel.x + bottomPanel.w - 58, bottomPanel.y - 6);
+
+  const tickIndices = [0, 9, 24, 49];
+  curveCtx.fillStyle = '#9eb8dc';
+  curveCtx.font = '10px "Segoe UI", sans-serif';
+  for (const idx of tickIndices) {
+    const x = bottomPanel.x + (bottomPanel.w * idx) / (levels.length - 1);
+    curveCtx.beginPath();
+    curveCtx.moveTo(x, bottomPanel.y + bottomPanel.h);
+    curveCtx.lineTo(x, bottomPanel.y + bottomPanel.h + 4);
+    curveCtx.strokeStyle = 'rgba(158, 184, 220, 0.6)';
+    curveCtx.lineWidth = 1;
+    curveCtx.stroke();
+    curveCtx.fillText(`L${levels[idx]}`, x - 8, bottomPanel.y + bottomPanel.h + 16);
+  }
+
+  drawCurveLegend(
+    [
+      { label: 'Damage', color: CURVE_COLORS.damage },
+      { label: 'DPS', color: CURVE_COLORS.dps },
+      { label: 'Range', color: CURVE_COLORS.range },
+      { label: 'Special', color: CURVE_COLORS.special },
+    ],
+    10,
+    123
+  );
+
+  const sampleAt = (arr, level) => arr[level - 1];
+  const specialLabel = specialCurveLabel(tower);
+  elCurveSummary.textContent = [
+    `${tower.name} curve snapshot`,
+    `Cost L1/L25/L50: ${Math.round(sampleAt(cost, 1))} / ${Math.round(sampleAt(cost, 25))} / ${Math.round(sampleAt(cost, 50))}`,
+    `Damage L1/L25/L50: ${Math.round(sampleAt(damage, 1))} / ${Math.round(sampleAt(damage, 25))} / ${Math.round(sampleAt(damage, 50))}`,
+    `DPS L1/L25/L50: ${sampleAt(dps, 1).toFixed(1)} / ${sampleAt(dps, 25).toFixed(1)} / ${sampleAt(dps, 50).toFixed(1)}`,
+    `${specialLabel} L1/L25/L50: ${sampleAt(special, 1)} / ${sampleAt(special, 25)} / ${sampleAt(special, 50)}`,
+    'Scaling rule: keep tower curves stable; scale difficulty by fleet HP/speed/rewards.',
+  ].join('\n');
+
+  curveDirty = false;
+}
+
+function rebuildCurveTowerSelect() {
+  elCurveTower.innerHTML = '';
+  for (const tower of Object.values(TOWER_CONFIG)) {
+    const option = document.createElement('option');
+    option.value = tower.id;
+    option.textContent = tower.name;
+    elCurveTower.appendChild(option);
+  }
+  elCurveTower.value = selectedCurveTowerId;
+  markCurveDirty();
 }
 
 function updateSelectionText() {
@@ -372,6 +548,7 @@ function updateHud() {
   btnFastForwardWave.textContent = fastForwardUntilMs > 0 ? 'Fast 1s Fleet Run (Active)' : 'Fast 1s Fleet Run';
   btnToggleAutoContinue.textContent = `Auto Continue: ${autoContinueEnabled ? 'On' : 'Off'}`;
   updateSelectionText();
+  updateCurveVisualization();
 }
 
 function drawMapBase() {
@@ -968,9 +1145,15 @@ btnReset.addEventListener('click', () => {
 btnLoadMap.addEventListener('click', loadSelectedMap);
 
 elMapSelect.addEventListener('change', updateMapMeta);
+elCurveTower.addEventListener('change', () => {
+  selectedCurveTowerId = elCurveTower.value;
+  markCurveDirty();
+  updateCurveVisualization(true);
+});
 
 rebuildMapSelect();
 rebuildTowerButtons();
+rebuildCurveTowerSelect();
 buildStaticMapLayers();
 updateMapMeta();
 updateHud();

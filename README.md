@@ -213,6 +213,7 @@ Primary runtime is now browser-based JS:
 Runtime control additions:
 - `Fast 1s Fleet Run`: compresses an active wave into about one second of wall time.
 - `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
+- `Tower Curves` panel: visualizes each tower's capability growth and cost growth across levels 1-50.
 
 Run local web prototype:
 
@@ -246,6 +247,10 @@ Current random-policy balance intent (not strict hard limits):
 - Map 1 clear rate near 90%,
 - Map 2 clear rate near 85%,
 - Map 3 clear rate near 80%.
+
+Scaling policy for future iterations:
+- Keep tower level curves mostly stable for consistency.
+- Scale campaign difficulty primarily with fleet-side values (`enemyScale`, enemy HP/speed/reward, leak pressure, and wave composition).
 
 Fast 1,000-run verification only (skip multiplier search):
 
