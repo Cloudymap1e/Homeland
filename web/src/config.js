@@ -1,23 +1,41 @@
 const MAX_TOWER_LEVEL = 50;
-const BALANCE_TUNING = {
-  windSlowMult: 1.452,
-  bombSplashMult: 1.427,
-  fireDpsMult: 1.144,
-};
+const ANCHOR_LEVELS = [1, 10, 20, 30, 40, 50];
 
 function roundTo(value, digits = 2) {
   return Number(value.toFixed(digits));
 }
 
-function intGrowth(base, level, linear, curved, power = 1.2) {
-  const t = level - 1;
-  return Math.round(base * (1 + linear * t + curved * Math.pow(t, power)));
+function interpolateAnchors(level, anchors) {
+  if (anchors.length !== ANCHOR_LEVELS.length) {
+    throw new Error('Anchor count must match ANCHOR_LEVELS count.');
+  }
+
+  if (level <= ANCHOR_LEVELS[0]) {
+    return anchors[0];
+  }
+
+  for (let i = 1; i < ANCHOR_LEVELS.length; i += 1) {
+    const leftLevel = ANCHOR_LEVELS[i - 1];
+    const rightLevel = ANCHOR_LEVELS[i];
+    if (level <= rightLevel) {
+      const t = (level - leftLevel) / (rightLevel - leftLevel);
+      return anchors[i - 1] + (anchors[i] - anchors[i - 1]) * t;
+    }
+  }
+
+  return anchors[anchors.length - 1];
 }
 
-function costGrowth(base, level, multiplier) {
-  const t = level - 1;
-  const cost = base * Math.pow(1 + multiplier, t);
-  return Math.max(60, Math.round(cost / 5) * 5);
+function intFromAnchors(level, anchors) {
+  return Math.round(interpolateAnchors(level, anchors));
+}
+
+function floatFromAnchors(level, anchors, digits = 2) {
+  return roundTo(interpolateAnchors(level, anchors), digits);
+}
+
+function costFromAnchors(level, anchors) {
+  return Math.max(60, Math.round(intFromAnchors(level, anchors) / 5) * 5);
 }
 
 function createArrowLevels() {
@@ -25,10 +43,10 @@ function createArrowLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costGrowth(500, level, 0.064),
-      damage: intGrowth(32, level, 0.082, 0.0105),
-      range: roundTo(2.8 + Math.min(0.95, (level - 1) * 0.018)),
-      attackSpeed: roundTo(1.1 + Math.min(1.65, (level - 1) * 0.034)),
+      cost: costFromAnchors(level, [500, 850, 1600, 2850, 4700, 7600]),
+      damage: intFromAnchors(level, [32, 70, 125, 190, 265, 350]),
+      range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
+      attackSpeed: floatFromAnchors(level, [1.1, 1.34, 1.58, 1.82, 2.04, 2.22]),
     });
   }
   return levels;
@@ -39,12 +57,12 @@ function createBombLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costGrowth(700, level, 0.067),
-      damage: intGrowth(120, level, 0.096, 0.013),
-      range: roundTo(2.6 + Math.min(0.9, (level - 1) * 0.017)),
-      attackSpeed: roundTo(0.52 + Math.min(0.88, (level - 1) * 0.018)),
-      splashRadius: roundTo((1.4 + Math.min(1.65, (level - 1) * 0.034)) * BALANCE_TUNING.bombSplashMult),
-      splashFalloff: Math.max(12, Math.round(45 - (level - 1) * 0.68)),
+      cost: costFromAnchors(level, [700, 1250, 2350, 4300, 7600, 13200]),
+      damage: intFromAnchors(level, [120, 250, 430, 690, 980, 1320]),
+      range: floatFromAnchors(level, [2.6, 2.75, 2.9, 3.05, 3.2, 3.35]),
+      attackSpeed: floatFromAnchors(level, [0.52, 0.64, 0.77, 0.9, 1.03, 1.16]),
+      splashRadius: floatFromAnchors(level, [1.4, 1.75, 2.15, 2.55, 2.95, 3.35]),
+      splashFalloff: intFromAnchors(level, [45, 42, 38, 34, 30, 26]),
     });
   }
   return levels;
@@ -55,36 +73,26 @@ function createFireLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costGrowth(800, level, 0.068),
-      damage: intGrowth(48, level, 0.084, 0.011),
-      range: roundTo(2.8 + Math.min(1.05, (level - 1) * 0.019)),
-      attackSpeed: roundTo(0.82 + Math.min(0.98, (level - 1) * 0.020)),
-      fireballDps: Math.round(intGrowth(70, level, 0.088, 0.012) * BALANCE_TUNING.fireDpsMult),
+      cost: costFromAnchors(level, [800, 1400, 2600, 4700, 8500, 15000]),
+      damage: intFromAnchors(level, [48, 100, 180, 290, 420, 580]),
+      range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
+      attackSpeed: floatFromAnchors(level, [0.82, 0.98, 1.15, 1.32, 1.48, 1.62]),
+      fireballDps: intFromAnchors(level, [70, 150, 260, 420, 610, 860]),
       fireballDuration: 3.0,
-      fireballRadius: roundTo(0.9 + Math.min(0.8, (level - 1) * 0.016)),
+      fireballRadius: floatFromAnchors(level, [0.9, 1.05, 1.2, 1.35, 1.5, 1.65]),
     });
   }
   return levels;
 }
 
 function windTargetsByLevel(level) {
-  if (level <= 16) {
+  if (level <= 17) {
     return 3;
   }
-  if (level <= 33) {
+  if (level <= 34) {
     return 5;
   }
   return 6;
-}
-
-function windSlowByLevel(level) {
-  if (level <= 16) {
-    return Math.min(90, Math.round((30 + Math.floor((level - 1) * 0.8)) * BALANCE_TUNING.windSlowMult));
-  }
-  if (level <= 33) {
-    return Math.min(90, Math.round((43 + Math.floor((level - 17) * 0.75)) * BALANCE_TUNING.windSlowMult));
-  }
-  return Math.min(90, Math.round((56 + Math.floor((level - 34) * 0.8)) * BALANCE_TUNING.windSlowMult));
 }
 
 function createWindLevels() {
@@ -92,12 +100,12 @@ function createWindLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costGrowth(760, level, 0.066),
-      damage: intGrowth(14, level, 0.082, 0.012),
-      range: roundTo(3.0 + Math.min(1.2, (level - 1) * 0.02)),
-      attackSpeed: roundTo(0.92 + Math.min(0.9, (level - 1) * 0.018)),
-      slowPercent: windSlowByLevel(level),
-      slowDuration: roundTo(2.2 + Math.min(1.4, (level - 1) * 0.03)),
+      cost: costFromAnchors(level, [760, 1320, 2450, 4450, 7900, 13800]),
+      damage: intFromAnchors(level, [14, 32, 58, 92, 132, 180]),
+      range: floatFromAnchors(level, [3.0, 3.2, 3.4, 3.6, 3.8, 4.0]),
+      attackSpeed: floatFromAnchors(level, [0.92, 1.06, 1.2, 1.34, 1.48, 1.6]),
+      slowPercent: intFromAnchors(level, [34, 42, 50, 58, 66, 74]),
+      slowDuration: floatFromAnchors(level, [2.2, 2.6, 3.0, 3.4, 3.8, 4.2]),
       windTargets: windTargetsByLevel(level),
     });
   }
@@ -108,10 +116,13 @@ function lightningChainsByLevel(level) {
   if (level <= 20) {
     return 1;
   }
-  if (level <= 40) {
+  if (level <= 35) {
     return 2;
   }
-  return 3;
+  if (level <= 45) {
+    return 3;
+  }
+  return 4;
 }
 
 function createLightningLevels() {
@@ -119,12 +130,12 @@ function createLightningLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costGrowth(900, level, 0.069),
-      damage: intGrowth(58, level, 0.09, 0.012),
-      range: roundTo(2.8 + Math.min(1.0, (level - 1) * 0.018)),
-      attackSpeed: roundTo(0.8 + Math.min(1.02, (level - 1) * 0.021)),
+      cost: costFromAnchors(level, [900, 1600, 3000, 5600, 10200, 18000]),
+      damage: intFromAnchors(level, [58, 122, 220, 360, 530, 760]),
+      range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
+      attackSpeed: floatFromAnchors(level, [0.8, 0.96, 1.12, 1.28, 1.44, 1.58]),
       chainCount: lightningChainsByLevel(level),
-      chainFalloff: Math.max(12, Math.round(35 - (level - 1) * 0.45)),
+      chainFalloff: intFromAnchors(level, [35, 32, 28, 24, 20, 16]),
     });
   }
   return levels;
