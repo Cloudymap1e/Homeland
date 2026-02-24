@@ -1,0 +1,101 @@
+# AGENTS.md
+
+This file defines how agents and contributors should execute work for this project.
+
+## Project Summary
+
+- Game type: Tower defense strategy.
+- Theme: Defend river routes from pirate fleets.
+- Core loop: Place towers near river paths, upgrade towers, stop fleets before they exit the map.
+- Current scope: Build a clean MVP foundation for early maps (no enemy attack behavior yet).
+
+## Product Rules (MVP)
+
+- Player starts on Map 1.
+- Every map includes a river path that enemies follow.
+- Towers can only be placed on valid build slots near the river.
+- Initial player balance: `10,000` coins.
+- Enemy waves are pirate fleets (boats), typically `10-20` boats per fleet.
+- Boats differ by speed and HP.
+- First maps: boats do not attack towers.
+- Failure condition component: if a boat exits the river end, player is penalized.
+- Penalties include coin deduction and XP deduction.
+- Progression: player needs enough XP to unlock the next map.
+- Difficulty scaling: later maps/waves increase enemy strength.
+
+## Tower Set (Initial)
+
+- Arrow Tower: consistent single-target physical damage.
+- Bone Tower: slower rate, heavier hit / armor-breaking profile.
+- Magic Tower (element variants):
+  - Fire: burn-over-time.
+  - Wind: attack speed or movement disruption effects.
+  - Lightning: chain or burst magic damage.
+
+Keep balancing data in config files, not hardcoded in gameplay systems.
+
+## Architecture Direction
+
+Use a data-driven architecture so balancing and content expansion are easy.
+
+- `MapConfig`: river path, build slots, wave plans, unlock requirement.
+- `TowerConfig`: cost, range, attack speed, damage, upgrade tree.
+- `EnemyConfig`: HP, speed, reward, special abilities (future).
+- `WaveConfig`: composition of enemy boats, spawn intervals.
+- `ProgressionConfig`: XP thresholds and map unlock rules.
+
+## Suggested Core Modules
+
+- `GameStateManager`: game phases, pause/resume, win/lose state.
+- `EconomySystem`: coins, spending, rewards, penalties.
+- `PlacementSystem`: tower placement validation and grid/slot occupancy.
+- `CombatSystem`: targeting, projectile/effect processing, damage resolution.
+- `WaveSystem`: spawns fleets and tracks wave completion.
+- `ProgressionSystem`: XP gain/loss and map unlock evaluation.
+- `UI/HUD`: coins, XP, wave status, build/upgrade controls.
+
+## Working Practices for Agents
+
+- Keep changes small and incremental.
+- Prefer config-first changes for balancing.
+- Add or update docs whenever game rules change.
+- For any new mechanic, define:
+  - player-facing behavior,
+  - system owner/module,
+  - data fields required,
+  - test scenario.
+
+## MVP Milestones
+
+1. Foundation
+- Set up project structure.
+- Implement config loading.
+- Implement map path + build slots.
+
+2. Core Gameplay
+- Add tower placement and 3 base tower types.
+- Add enemy movement along river path.
+- Add damage/combat and wave completion.
+
+3. Economy + Progression
+- Add initial coins, rewards, costs, penalties.
+- Add XP gain/loss and next-map unlock logic.
+
+4. Polish for First Playable
+- HUD clarity.
+- Basic VFX/SFX placeholders.
+- Balance pass for Map 1.
+
+## Out of Scope (For Now)
+
+- Enemy boat attacks against towers.
+- Advanced abilities and status combinations beyond basic element behavior.
+- Meta systems (inventory/hero/cards/etc.).
+- Multiplayer.
+
+## Definition of Done (for each gameplay task)
+
+- Mechanic works in playable scene.
+- Data is configurable without code edits.
+- Basic edge cases are handled.
+- README and relevant docs are updated.
