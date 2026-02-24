@@ -9,18 +9,38 @@
   <body>
     <div class="layout">
       <aside class="panel">
-        <h1>Homeland</h1>
-        <p class="subtitle">River Defense Prototype (JS)</p>
+        <header class="panel-header">
+          <h1>Homeland</h1>
+          <p class="subtitle">River Defense Command Deck</p>
+        </header>
 
-        <section>
+        <section class="resource-section">
           <h2>Resources</h2>
-          <div class="stats">
-            <div>Map: <strong id="map-name">-</strong></div>
-            <div>Coins: <strong id="coins">0</strong></div>
-            <div>XP: <strong id="xp">0</strong></div>
-            <div>Wave: <strong id="wave">0/0</strong></div>
-            <div>Boats Left: <strong id="boats-left">0</strong></div>
-            <div>State: <strong id="state">build_phase</strong></div>
+          <div class="resource-grid">
+            <div class="resource-card resource-coin">
+              <span>Coins Left</span>
+              <strong id="coins">0</strong>
+            </div>
+            <div class="resource-card">
+              <span>XP</span>
+              <strong id="xp">0</strong>
+            </div>
+            <div class="resource-card resource-map">
+              <span>Map</span>
+              <strong id="map-name">-</strong>
+            </div>
+            <div class="resource-card">
+              <span>Wave</span>
+              <strong id="wave">0/0</strong>
+            </div>
+            <div class="resource-card">
+              <span>Boats Left</span>
+              <strong id="boats-left">0</strong>
+            </div>
+            <div class="resource-card">
+              <span>State</span>
+              <strong id="state">Build</strong>
+            </div>
           </div>
         </section>
 
@@ -71,7 +91,27 @@
       </aside>
 
       <main class="game-area">
-        <canvas id="game" width="1100" height="680"></canvas>
+        <div class="stage-shell">
+          <canvas id="game" width="1100" height="680"></canvas>
+          <div class="overlay-hud">
+            <div class="overlay-chip">
+              <span>Coins Left</span>
+              <strong id="coins-overlay">0</strong>
+            </div>
+            <div class="overlay-chip">
+              <span>Wave</span>
+              <strong id="wave-overlay">0/0</strong>
+            </div>
+            <div class="overlay-chip">
+              <span>Boats</span>
+              <strong id="boats-overlay">0</strong>
+            </div>
+            <div class="overlay-chip">
+              <span>State</span>
+              <strong id="state-overlay">Build</strong>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
 

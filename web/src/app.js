@@ -15,6 +15,10 @@ const elSelection = document.getElementById('selection');
 const elTowerButtons = document.getElementById('tower-buttons');
 const elMapSelect = document.getElementById('map-select');
 const elMapMeta = document.getElementById('map-meta');
+const elCoinsOverlay = document.getElementById('coins-overlay');
+const elWaveOverlay = document.getElementById('wave-overlay');
+const elBoatsOverlay = document.getElementById('boats-overlay');
+const elStateOverlay = document.getElementById('state-overlay');
 const elCurveTower = document.getElementById('curve-tower');
 const curveCanvas = document.getElementById('curve-chart');
 const curveCtx = curveCanvas.getContext('2d');
@@ -49,6 +53,12 @@ const CURVE_COLORS = {
   range: '#6fd2ff',
   special: '#8be39f',
   cost: '#c5a8ff',
+};
+const STATE_LABELS = {
+  build_phase: 'Build',
+  wave_running: 'Wave Live',
+  wave_result: 'Wave Clear',
+  map_result: 'Map Result',
 };
 
 const visualEffects = [];
@@ -324,6 +334,14 @@ function updateMapMeta() {
   ].join(' | ');
 }
 
+function formatNumber(value) {
+  return Number(value).toLocaleString('en-US');
+}
+
+function stateLabel(stateId) {
+  return STATE_LABELS[stateId] || stateId;
+}
+
 function markCurveDirty() {
   curveDirty = true;
 }
@@ -527,20 +545,25 @@ function updateSelectionText() {
 function updateHud() {
   const snap = game.getSnapshot();
   elMapName.textContent = snap.mapName;
-  elCoins.textContent = String(snap.coins);
-  elXp.textContent = String(snap.xp);
+  elCoins.textContent = formatNumber(snap.coins);
+  elXp.textContent = formatNumber(snap.xp);
   elWave.textContent = `${Math.max(snap.wave, 0)}/${snap.totalWaves}`;
-  elBoatsLeft.textContent = String(snap.boatsLeft);
-  elState.textContent = snap.state;
+  elBoatsLeft.textContent = formatNumber(snap.boatsLeft);
+  elState.textContent = stateLabel(snap.state);
+
+  elCoinsOverlay.textContent = formatNumber(snap.coins);
+  elWaveOverlay.textContent = `${Math.max(snap.wave, 0)}/${snap.totalWaves}`;
+  elBoatsOverlay.textContent = formatNumber(snap.boatsLeft);
+  elStateOverlay.textContent = stateLabel(snap.state);
 
   if (snap.result) {
     if (snap.result.victory) {
       elResult.innerHTML = `Victory on ${snap.mapName}. Next unlock reached: <strong>${snap.result.nextMapUnlocked ? 'Yes' : 'No'}</strong>`;
     } else {
-      elResult.textContent = `Defeat on ${snap.mapName}. Coins dropped below zero.`;
+      elResult.textContent = `Defeat on ${snap.mapName}. Treasury exhausted.`;
     }
   } else {
-    elResult.textContent = 'In progress.';
+    elResult.textContent = 'Fleet in progress. Reinforce river chokepoints and upgrade efficiently.';
   }
 
   btnStartWave.disabled = !['build_phase', 'wave_result'].includes(game.state);
