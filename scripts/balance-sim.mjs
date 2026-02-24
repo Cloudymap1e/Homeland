@@ -50,6 +50,8 @@ function parseArgs(argv) {
     maps: 'all',
     workers: DEFAULT_WORKERS,
     cuda: false,
+    searchRuns: null,
+    skipSearch: false,
   };
 
   for (const arg of argv) {
@@ -62,6 +64,10 @@ function parseArgs(argv) {
       args.workers = raw === 'auto' ? DEFAULT_WORKERS : Math.max(1, Number(raw));
     } else if (arg === '--cuda') {
       args.cuda = true;
+    } else if (arg.startsWith('--search-runs=')) {
+      args.searchRuns = Math.max(20, Number(arg.split('=')[1]));
+    } else if (arg === '--skip-search') {
+      args.skipSearch = true;
     }
   }
   return args;
@@ -562,7 +568,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mapIds = parseMapIds(args.maps);
   const baselineMultipliers = { windSlowMult: 1, bombSplashMult: 1, fireDpsMult: 1 };
-  const searchRuns = Math.max(80, Math.round(args.runs * SEARCH_FRACTION));
+  const searchRuns = args.searchRuns || Math.max(80, Math.round(args.runs * SEARCH_FRACTION));
 
   console.log('Homeland Monte Carlo Balance Simulation');
   console.log(`runs=${args.runs} searchRuns=${searchRuns} workers=${args.workers}`);
@@ -588,6 +594,11 @@ async function main() {
   for (const mapId of mapIds) {
     console.log(`\n${getMapById(mapId).name}`);
     console.log(JSON.stringify(formatSummary(baseline[mapId]), null, 2));
+  }
+
+  if (args.skipSearch) {
+    console.log('\nSearch skipped by --skip-search. Baseline values are the active tuned values.');
+    return;
   }
 
   console.log('\nSearching multipliers...');
@@ -704,4 +715,3 @@ if (isMainThread) {
 } else if (workerData?.mode === 'batch') {
   runWorkerBatch();
 }
-

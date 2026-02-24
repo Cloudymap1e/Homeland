@@ -231,6 +231,13 @@ cd /Users/rc/Project/Homeland
 npm run balance:sim
 ```
 
+Fast 1,000-run verification only (skip multiplier search):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:verify
+```
+
 GS75 CUDA-first balance run:
 
 ```bash
