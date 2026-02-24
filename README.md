@@ -231,6 +231,12 @@ cd /Users/rc/Project/Homeland
 npm run balance:sim
 ```
 
+This command runs:
+- multipliers search,
+- full 1,000-run verification,
+- diversity scenario matrix (mono/duo/mixed),
+- controlled OAT sensitivity checks (one factor at a time).
+
 Fast 1,000-run verification only (skip multiplier search):
 
 ```bash
@@ -238,11 +244,25 @@ cd /Users/rc/Project/Homeland
 npm run balance:verify
 ```
 
+Diversity + controlled-variable suite without search (faster):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:diversity
+```
+
 GS75 CUDA-first balance run:
 
 ```bash
 cd /Users/rc/Project/Homeland
 npm run balance:gs75
+```
+
+Quick CUDA availability check:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:cuda-check
 ```
 
 Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.

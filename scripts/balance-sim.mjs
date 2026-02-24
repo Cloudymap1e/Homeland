@@ -6,42 +6,178 @@ import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG } from '../web/src/config.js';
 
 const DEFAULT_RUNS = 1000;
 const DEFAULT_WORKERS = Math.max(1, Math.min(8, (os.cpus()?.length || 4) - 1));
-const SEARCH_FRACTION = 0.22;
+const SEARCH_FRACTION = 0.2;
+
+const TOWER_IDS = ['arrow', 'bone', 'magic_fire', 'magic_wind', 'magic_lightning'];
+const MONO_POLICIES = ['mono_arrow', 'mono_bomb', 'mono_fire', 'mono_wind', 'mono_lightning'];
 
 const TARGETS = {
   map_01_river_bend: {
     qualityMin: 0.7,
-    qualityMax: 0.86,
-    qualityCenter: 0.78,
-    leaksMin: 2,
+    qualityMax: 0.9,
+    qualityCenter: 0.8,
+    leaksMin: 1,
     leaksMax: 10,
-    leaksCenter: 5.5,
+    leaksCenter: 4.5,
     qualityLeakCap: 12,
   },
   map_02_split_delta: {
     qualityMin: 0.58,
-    qualityMax: 0.78,
-    qualityCenter: 0.68,
-    leaksMin: 4,
+    qualityMax: 0.82,
+    qualityCenter: 0.7,
+    leaksMin: 3,
     leaksMax: 16,
-    leaksCenter: 9,
+    leaksCenter: 8,
     qualityLeakCap: 18,
   },
   map_03_marsh_maze: {
     qualityMin: 0.45,
-    qualityMax: 0.68,
-    qualityCenter: 0.56,
+    qualityMax: 0.72,
+    qualityCenter: 0.58,
     leaksMin: 7,
-    leaksMax: 24,
+    leaksMax: 26,
     leaksCenter: 14,
-    qualityLeakCap: 26,
+    qualityLeakCap: 28,
   },
 };
 
 const SEARCH_GRID = {
-  wind: [0.95, 1.0, 1.05, 1.1, 1.15, 1.2],
-  bomb: [0.9, 1.0, 1.1, 1.2, 1.3],
-  fire: [0.9, 1.0, 1.05, 1.1, 1.15],
+  wind: [0.92, 1.0, 1.08, 1.16],
+  bomb: [0.9, 1.0, 1.1, 1.2],
+  fire: [0.9, 1.0, 1.1, 1.2],
+};
+
+const OAT_GRID = {
+  windSlowMult: [0.9, 1.0, 1.1],
+  bombSplashMult: [0.9, 1.0, 1.1],
+  fireDpsMult: [0.9, 1.0, 1.1],
+};
+
+const POLICIES = {
+  balanced: {
+    id: 'balanced',
+    label: 'Balanced Mix',
+    allowed: TOWER_IDS,
+    minimums: [
+      { towerId: 'arrow', min: 1, wave: 1 },
+      { towerId: 'bone', min: 1, wave: 1 },
+      { towerId: 'magic_fire', min: 1, wave: 2 },
+      { towerId: 'magic_wind', min: 1, wave: 2 },
+      { towerId: 'magic_lightning', min: 1, wave: 4 },
+    ],
+    weightMult: {
+      arrow: 0.86,
+      bone: 1.14,
+      magic_fire: 1.18,
+      magic_wind: 1.04,
+      magic_lightning: 1.12,
+    },
+    spreadTargets: {
+      arrow: 0.18,
+      bone: 0.26,
+      magic_fire: 0.24,
+      magic_wind: 0.18,
+      magic_lightning: 0.14,
+    },
+    upgradeBias: {
+      arrow: 0.95,
+      bone: 1.2,
+      magic_fire: 1.2,
+      magic_wind: 1.08,
+      magic_lightning: 1.18,
+    },
+  },
+  random_all: {
+    id: 'random_all',
+    label: 'Random All Towers',
+    allowed: TOWER_IDS,
+    minimums: [],
+    equalWeights: true,
+    weightMult: {},
+    spreadTargets: null,
+    upgradeBias: {},
+  },
+  mono_arrow: {
+    id: 'mono_arrow',
+    label: 'Mono Arrow',
+    allowed: ['arrow'],
+    minimums: [{ towerId: 'arrow', min: 3, wave: 1 }],
+    weightMult: { arrow: 1.2 },
+    spreadTargets: null,
+    upgradeBias: { arrow: 1.2 },
+  },
+  mono_bomb: {
+    id: 'mono_bomb',
+    label: 'Mono Bomb',
+    allowed: ['bone'],
+    minimums: [{ towerId: 'bone', min: 2, wave: 1 }],
+    weightMult: { bone: 1.2 },
+    spreadTargets: null,
+    upgradeBias: { bone: 1.2 },
+  },
+  mono_fire: {
+    id: 'mono_fire',
+    label: 'Mono Fire',
+    allowed: ['magic_fire'],
+    minimums: [{ towerId: 'magic_fire', min: 2, wave: 1 }],
+    weightMult: { magic_fire: 1.2 },
+    spreadTargets: null,
+    upgradeBias: { magic_fire: 1.2 },
+  },
+  mono_wind: {
+    id: 'mono_wind',
+    label: 'Mono Wind',
+    allowed: ['magic_wind'],
+    minimums: [{ towerId: 'magic_wind', min: 2, wave: 1 }],
+    weightMult: { magic_wind: 1.2 },
+    spreadTargets: null,
+    upgradeBias: { magic_wind: 1.2 },
+  },
+  mono_lightning: {
+    id: 'mono_lightning',
+    label: 'Mono Lightning',
+    allowed: ['magic_lightning'],
+    minimums: [{ towerId: 'magic_lightning', min: 2, wave: 1 }],
+    weightMult: { magic_lightning: 1.2 },
+    spreadTargets: null,
+    upgradeBias: { magic_lightning: 1.2 },
+  },
+  duo_bomb_fire: {
+    id: 'duo_bomb_fire',
+    label: 'Duo Bomb + Fire',
+    allowed: ['bone', 'magic_fire'],
+    minimums: [
+      { towerId: 'bone', min: 2, wave: 1 },
+      { towerId: 'magic_fire', min: 2, wave: 2 },
+    ],
+    weightMult: { bone: 1.15, magic_fire: 1.15 },
+    spreadTargets: { bone: 0.5, magic_fire: 0.5 },
+    upgradeBias: { bone: 1.1, magic_fire: 1.1 },
+  },
+  duo_arrow_wind: {
+    id: 'duo_arrow_wind',
+    label: 'Duo Arrow + Wind',
+    allowed: ['arrow', 'magic_wind'],
+    minimums: [
+      { towerId: 'arrow', min: 2, wave: 1 },
+      { towerId: 'magic_wind', min: 2, wave: 2 },
+    ],
+    weightMult: { arrow: 1.1, magic_wind: 1.2 },
+    spreadTargets: { arrow: 0.55, magic_wind: 0.45 },
+    upgradeBias: { arrow: 1.05, magic_wind: 1.12 },
+  },
+  duo_fire_lightning: {
+    id: 'duo_fire_lightning',
+    label: 'Duo Fire + Lightning',
+    allowed: ['magic_fire', 'magic_lightning'],
+    minimums: [
+      { towerId: 'magic_fire', min: 2, wave: 1 },
+      { towerId: 'magic_lightning', min: 1, wave: 3 },
+    ],
+    weightMult: { magic_fire: 1.1, magic_lightning: 1.1 },
+    spreadTargets: { magic_fire: 0.6, magic_lightning: 0.4 },
+    upgradeBias: { magic_fire: 1.1, magic_lightning: 1.12 },
+  },
 };
 
 function parseArgs(argv) {
@@ -50,8 +186,13 @@ function parseArgs(argv) {
     maps: 'all',
     workers: DEFAULT_WORKERS,
     cuda: false,
+    cudaRequired: false,
     searchRuns: null,
     skipSearch: false,
+    suite: 'full',
+    diversityRuns: null,
+    oatRuns: null,
+    policies: 'balanced',
   };
 
   for (const arg of argv) {
@@ -64,13 +205,50 @@ function parseArgs(argv) {
       args.workers = raw === 'auto' ? DEFAULT_WORKERS : Math.max(1, Number(raw));
     } else if (arg === '--cuda') {
       args.cuda = true;
+    } else if (arg === '--cuda-required') {
+      args.cuda = true;
+      args.cudaRequired = true;
     } else if (arg.startsWith('--search-runs=')) {
       args.searchRuns = Math.max(20, Number(arg.split('=')[1]));
     } else if (arg === '--skip-search') {
       args.skipSearch = true;
+    } else if (arg.startsWith('--suite=')) {
+      args.suite = arg.split('=')[1];
+    } else if (arg.startsWith('--diversity-runs=')) {
+      args.diversityRuns = Math.max(20, Number(arg.split('=')[1]));
+    } else if (arg.startsWith('--oat-runs=')) {
+      args.oatRuns = Math.max(20, Number(arg.split('=')[1]));
+    } else if (arg.startsWith('--policies=')) {
+      args.policies = arg.split('=')[1];
     }
   }
   return args;
+}
+
+function parseMapIds(raw) {
+  if (raw === 'all') {
+    return Object.keys(MAPS);
+  }
+  const requested = raw.split(',').map((id) => id.trim()).filter(Boolean);
+  if (!requested.length) {
+    return [DEFAULT_MAP_ID];
+  }
+  return requested.filter((id) => Boolean(MAPS[id]));
+}
+
+function parsePolicyIds(raw) {
+  if (raw === 'all') {
+    return Object.keys(POLICIES);
+  }
+  const requested = raw.split(',').map((id) => id.trim()).filter(Boolean);
+  if (!requested.length) {
+    return ['balanced'];
+  }
+  return requested.filter((id) => Boolean(POLICIES[id]));
+}
+
+function getPolicy(policyId) {
+  return POLICIES[policyId] || POLICIES.balanced;
 }
 
 function createRng(seed) {
@@ -127,22 +305,22 @@ function upgradeCost(tower) {
 }
 
 function towerCounts(game) {
-  const counts = {
-    arrow: 0,
-    bone: 0,
-    magic_fire: 0,
-    magic_wind: 0,
-    magic_lightning: 0,
-  };
+  const counts = {};
+  for (const towerId of TOWER_IDS) {
+    counts[towerId] = 0;
+  }
   for (const tower of getBuiltTowers(game)) {
-    counts[tower.towerId] = (counts[tower.towerId] || 0) + 1;
+    counts[tower.towerId] += 1;
   }
   return counts;
 }
 
 function desiredTowerCount(game, waveIndex) {
   const fraction = Math.min(1, waveIndex / Math.max(1, game.waves.length - 1));
-  return Math.min(game.mapConfig.buildSlots.length, 5 + Math.floor(fraction * (game.mapConfig.buildSlots.length - 4)));
+  return Math.min(
+    game.mapConfig.buildSlots.length,
+    5 + Math.floor(fraction * (game.mapConfig.buildSlots.length - 4))
+  );
 }
 
 function desiredUpgradeLevel(game, waveIndex) {
@@ -150,7 +328,7 @@ function desiredUpgradeLevel(game, waveIndex) {
   return 2 + Math.floor(fraction * 24);
 }
 
-function buildWeights(waveIndex, counts, mapId) {
+function baseWeightsForMap(mapId) {
   const base = {
     arrow: 0.28,
     bone: 0.25,
@@ -162,22 +340,58 @@ function buildWeights(waveIndex, counts, mapId) {
     base.bone += 0.04;
     base.magic_lightning += 0.05;
   }
-  if (waveIndex >= 3 && (counts.magic_wind || 0) === 0) {
-    base.magic_wind += 0.9;
-  }
-  if (waveIndex >= 4 && (counts.magic_fire || 0) === 0) {
-    base.magic_fire += 0.7;
-  }
-  if ((counts.bone || 0) === 0) {
-    base.bone += 0.65;
-  }
-  if ((counts.arrow || 0) < 2) {
-    base.arrow += 0.45;
-  }
   return base;
 }
 
-function tryBuildSpecific(game, rand, towerId) {
+function buildWeights(waveIndex, counts, mapId, policy) {
+  const weights = baseWeightsForMap(mapId);
+  const allowedSet = new Set(policy.allowed);
+  const totalBuilt = TOWER_IDS.reduce((sum, id) => sum + counts[id], 0);
+
+  if (waveIndex >= 3 && counts.magic_wind === 0 && allowedSet.has('magic_wind')) {
+    weights.magic_wind += 0.8;
+  }
+  if (waveIndex >= 4 && counts.magic_fire === 0 && allowedSet.has('magic_fire')) {
+    weights.magic_fire += 0.7;
+  }
+  if (counts.bone === 0 && allowedSet.has('bone')) {
+    weights.bone += 0.6;
+  }
+  if (counts.arrow < 2 && allowedSet.has('arrow')) {
+    weights.arrow += 0.4;
+  }
+
+  if (policy.equalWeights) {
+    for (const id of TOWER_IDS) {
+      weights[id] = allowedSet.has(id) ? 1 : 0;
+    }
+  }
+
+  if (policy.spreadTargets && totalBuilt > 0) {
+    for (const id of policy.allowed) {
+      const currentShare = counts[id] / totalBuilt;
+      const targetShare = policy.spreadTargets[id] || 0;
+      if (currentShare < targetShare - 0.06) {
+        weights[id] += 0.35;
+      }
+    }
+  }
+
+  for (const id of TOWER_IDS) {
+    if (!allowedSet.has(id)) {
+      weights[id] = 0;
+    } else {
+      weights[id] = Math.max(0.01, weights[id] * (policy.weightMult[id] || 1));
+    }
+  }
+
+  return weights;
+}
+
+function tryBuildSpecific(game, rand, towerId, policy) {
+  if (!policy.allowed.includes(towerId)) {
+    return false;
+  }
   const cfg = TOWER_CONFIG[towerId];
   if (!cfg || game.coins < cfg.levels[0].cost) {
     return false;
@@ -190,26 +404,44 @@ function tryBuildSpecific(game, rand, towerId) {
   return game.buildTower(slot.id, towerId).ok;
 }
 
-function tryBuildAction(game, rand, waveIndex, counts, mapId) {
+function enforceMinimumComposition(game, rand, policy, waveIndex, counts) {
+  for (const rule of policy.minimums || []) {
+    if (waveIndex < rule.wave) {
+      continue;
+    }
+    if (counts[rule.towerId] < rule.min && tryBuildSpecific(game, rand, rule.towerId, policy)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tryBuildAction(game, rand, waveIndex, counts, mapId, policy) {
   const emptySlots = getEmptySlots(game);
   if (emptySlots.length === 0) {
     return false;
   }
-  const weights = buildWeights(waveIndex, counts, mapId);
+
+  const weights = buildWeights(waveIndex, counts, mapId, policy);
   const affordable = Object.values(TOWER_CONFIG)
-    .map((cfg) => ({ towerId: cfg.id, cost: cfg.levels[0].cost, weight: weights[cfg.id] || 0.1 }))
-    .filter((entry) => entry.cost <= game.coins);
+    .map((cfg) => ({ towerId: cfg.id, cost: cfg.levels[0].cost, weight: weights[cfg.id] || 0 }))
+    .filter((entry) => entry.cost <= game.coins && entry.weight > 0);
+
   if (!affordable.length) {
     return false;
   }
+
   const slot = pickRandom(rand, emptySlots);
   const pick = pickWeighted(rand, affordable);
   return game.buildTower(slot.id, pick.towerId).ok;
 }
 
-function tryUpgradeAction(game, rand, waveIndex) {
+function tryUpgradeAction(game, rand, waveIndex, policy) {
   const targetLevel = desiredUpgradeLevel(game, waveIndex);
+  const allowedSet = new Set(policy.allowed);
+
   const upgradeable = getUpgradeableTowers(game)
+    .filter((tower) => allowedSet.has(tower.towerId))
     .map((tower) => ({ tower, cost: upgradeCost(tower) }))
     .filter((entry) => entry.cost <= game.coins);
 
@@ -221,13 +453,9 @@ function tryUpgradeAction(game, rand, waveIndex) {
     const id = entry.tower.towerId;
     let weight = 1;
     if (entry.tower.level < targetLevel) {
-      weight += 1.4;
+      weight += 1.3;
     }
-    if (id === 'arrow') weight += 0.34;
-    if (id === 'bone') weight += 0.42;
-    if (id === 'magic_fire') weight += 0.38;
-    if (id === 'magic_wind' && waveIndex >= 4) weight += 0.3;
-    if (id === 'magic_lightning' && waveIndex >= 7) weight += 0.2;
+    weight *= policy.upgradeBias[id] || 1;
     return { ...entry, weight };
   });
 
@@ -235,7 +463,7 @@ function tryUpgradeAction(game, rand, waveIndex) {
   return game.upgradeTower(pick.tower.slotId).ok;
 }
 
-function runBuildPhase(game, rand, mapId) {
+function runBuildPhase(game, rand, mapId, policy) {
   const waveIndex = Math.max(0, game.waveIndex + 1);
   const actions = 3 + Math.floor(rand() * 5);
   const wantedTowers = desiredTowerCount(game, waveIndex);
@@ -244,38 +472,47 @@ function runBuildPhase(game, rand, mapId) {
     const built = getBuiltTowers(game);
     const counts = towerCounts(game);
 
-    if (waveIndex >= 2 && counts.magic_wind === 0 && tryBuildSpecific(game, rand, 'magic_wind')) {
-      continue;
-    }
-    if (waveIndex >= 3 && counts.magic_fire === 0 && tryBuildSpecific(game, rand, 'magic_fire')) {
-      continue;
-    }
-    if (counts.bone === 0 && tryBuildSpecific(game, rand, 'bone')) {
+    if (enforceMinimumComposition(game, rand, policy, waveIndex, counts)) {
       continue;
     }
 
     const shouldBuild = built.length < wantedTowers && getEmptySlots(game).length > 0;
-    if (shouldBuild && tryBuildAction(game, rand, waveIndex, counts, mapId)) {
+    if (shouldBuild && tryBuildAction(game, rand, waveIndex, counts, mapId, policy)) {
       continue;
     }
-    if (tryUpgradeAction(game, rand, waveIndex)) {
+    if (tryUpgradeAction(game, rand, waveIndex, policy)) {
       continue;
     }
-    if (tryBuildAction(game, rand, waveIndex, counts, mapId)) {
+    if (tryBuildAction(game, rand, waveIndex, counts, mapId, policy)) {
       continue;
     }
     break;
   }
 }
 
-function runSingle(seed, mapId) {
+function captureTowerLayout(game) {
+  const counts = {};
+  const levelSums = {};
+  for (const id of TOWER_IDS) {
+    counts[id] = 0;
+    levelSums[id] = 0;
+  }
+  for (const tower of getBuiltTowers(game)) {
+    counts[tower.towerId] += 1;
+    levelSums[tower.towerId] += tower.level;
+  }
+  return { counts, levelSums };
+}
+
+function runSingle(seed, mapId, policyId) {
   const rand = createRng(seed);
+  const policy = getPolicy(policyId);
   const game = new HomelandGame({ mapId });
   let guard = 0;
 
   while (game.state !== 'map_result' && guard < 500000) {
     if (game.state === 'build_phase' || game.state === 'wave_result') {
-      runBuildPhase(game, rand, mapId);
+      runBuildPhase(game, rand, mapId, policy);
       const started = game.startNextWave();
       if (!started.ok) {
         break;
@@ -288,12 +525,23 @@ function runSingle(seed, mapId) {
   }
 
   const snap = game.getSnapshot();
+  const layout = captureTowerLayout(game);
   return {
     victory: Boolean(snap.result?.victory),
     leaked: snap.leaked,
     coins: snap.coins,
     xp: snap.xp,
+    towerCounts: layout.counts,
+    towerLevelSums: layout.levelSums,
   };
+}
+
+function emptyTowerObject() {
+  const base = {};
+  for (const id of TOWER_IDS) {
+    base[id] = 0;
+  }
+  return base;
 }
 
 function emptyAggregate() {
@@ -308,7 +556,17 @@ function emptyAggregate() {
     winCount: 0,
     lossLeakSum: 0,
     lossCount: 0,
+    towerBuiltTotals: emptyTowerObject(),
+    towerLevelTotals: emptyTowerObject(),
   };
+}
+
+function mergeTowerObjects(a, b) {
+  const merged = {};
+  for (const id of TOWER_IDS) {
+    merged[id] = a[id] + b[id];
+  }
+  return merged;
 }
 
 function mergeAggregate(a, b) {
@@ -323,11 +581,44 @@ function mergeAggregate(a, b) {
     winCount: a.winCount + b.winCount,
     lossLeakSum: a.lossLeakSum + b.lossLeakSum,
     lossCount: a.lossCount + b.lossCount,
+    towerBuiltTotals: mergeTowerObjects(a.towerBuiltTotals, b.towerBuiltTotals),
+    towerLevelTotals: mergeTowerObjects(a.towerLevelTotals, b.towerLevelTotals),
+  };
+}
+
+function diversityStats(towerBuiltTotals) {
+  const total = TOWER_IDS.reduce((sum, id) => sum + towerBuiltTotals[id], 0);
+  if (total <= 0) {
+    return { entropy: 0, topTowerShare: 0 };
+  }
+  let entropy = 0;
+  let topTowerShare = 0;
+  for (const id of TOWER_IDS) {
+    const share = towerBuiltTotals[id] / total;
+    if (share > 0) {
+      entropy -= share * Math.log(share);
+      topTowerShare = Math.max(topTowerShare, share);
+    }
+  }
+  const normalizedEntropy = entropy / Math.log(TOWER_IDS.length);
+  return {
+    entropy: normalizedEntropy,
+    topTowerShare,
   };
 }
 
 function finalizeAggregate(agg) {
   const avg = (sum, count) => (count ? sum / count : 0);
+  const avgTowerBuilt = {};
+  const avgTowerLevel = {};
+  for (const id of TOWER_IDS) {
+    avgTowerBuilt[id] = avg(agg.towerBuiltTotals[id], agg.runs);
+    avgTowerLevel[id] = agg.towerBuiltTotals[id] > 0
+      ? agg.towerLevelTotals[id] / agg.towerBuiltTotals[id]
+      : 0;
+  }
+  const diversity = diversityStats(agg.towerBuiltTotals);
+
   return {
     runs: agg.runs,
     wins: agg.wins,
@@ -340,6 +631,10 @@ function finalizeAggregate(agg) {
     avgXp: avg(agg.xpSum, agg.runs),
     avgWinLeaks: avg(agg.winLeakSum, agg.winCount),
     avgLossLeaks: avg(agg.lossLeakSum, agg.lossCount),
+    avgTowerBuilt,
+    avgTowerLevel,
+    diversityEntropy: diversity.entropy,
+    topTowerShare: diversity.topTowerShare,
   };
 }
 
@@ -386,9 +681,31 @@ function clampPenalty(value, min, max, center) {
 }
 
 function mapScore(summary, target) {
-  const qualityPenalty = clampPenalty(summary.qualityRate, target.qualityMin, target.qualityMax, target.qualityCenter);
-  const leaksPenalty = clampPenalty(summary.avgLeaks, target.leaksMin, target.leaksMax, target.leaksCenter);
+  const qualityPenalty = clampPenalty(
+    summary.qualityRate,
+    target.qualityMin,
+    target.qualityMax,
+    target.qualityCenter
+  );
+  const leaksPenalty = clampPenalty(
+    summary.avgLeaks,
+    target.leaksMin,
+    target.leaksMax,
+    target.leaksCenter
+  );
   return qualityPenalty * 3.2 + leaksPenalty * 1.5;
+}
+
+function scoreCandidate(byMap, multipliers, mapIds) {
+  const baseScore = mapIds.reduce((sum, mapId) => {
+    return sum + mapScore(byMap[mapId], TARGETS[mapId]);
+  }, 0) / mapIds.length;
+
+  const changePenalty =
+    Math.abs(multipliers.windSlowMult - 1) * 0.24 +
+    Math.abs(multipliers.bombSplashMult - 1) * 0.24 +
+    Math.abs(multipliers.fireDpsMult - 1) * 0.24;
+  return baseScore + changePenalty;
 }
 
 function inTarget(summary, target) {
@@ -398,15 +715,6 @@ function inTarget(summary, target) {
     summary.avgLeaks >= target.leaksMin &&
     summary.avgLeaks <= target.leaksMax
   );
-}
-
-function scoreCandidate(byMap, multipliers, mapIds) {
-  const baseScore = mapIds.reduce((sum, mapId) => sum + mapScore(byMap[mapId], TARGETS[mapId]), 0) / mapIds.length;
-  const changePenalty =
-    Math.abs(multipliers.windSlowMult - 1) * 0.24 +
-    Math.abs(multipliers.bombSplashMult - 1) * 0.24 +
-    Math.abs(multipliers.fireDpsMult - 1) * 0.24;
-  return baseScore + changePenalty;
 }
 
 function scoreInBand(byMap, multipliers, mapIds) {
@@ -436,7 +744,7 @@ function isCudaAvailable() {
   }
 }
 
-async function runManyParallel({ mapId, runs, seedStart, workers, multipliers }) {
+async function runManyParallel({ mapId, runs, seedStart, workers, multipliers, policyId }) {
   if (runs <= 0) {
     return finalizeAggregate(emptyAggregate());
   }
@@ -458,6 +766,7 @@ async function runManyParallel({ mapId, runs, seedStart, workers, multipliers })
             runs: count,
             seedStart: cursor,
             multipliers,
+            policyId,
           },
         });
         cursor += count;
@@ -481,6 +790,19 @@ async function runManyParallel({ mapId, runs, seedStart, workers, multipliers })
   return finalizeAggregate(merged);
 }
 
+function compactTowerSummary(summary) {
+  return {
+    avgBuilt: Object.fromEntries(
+      Object.entries(summary.avgTowerBuilt).map(([k, v]) => [k, Number(v.toFixed(2))])
+    ),
+    avgLevel: Object.fromEntries(
+      Object.entries(summary.avgTowerLevel).map(([k, v]) => [k, Number(v.toFixed(1))])
+    ),
+    entropy: Number(summary.diversityEntropy.toFixed(3)),
+    topTowerShare: Number(summary.topTowerShare.toFixed(3)),
+  };
+}
+
 function formatSummary(summary) {
   return {
     runs: summary.runs,
@@ -494,10 +816,11 @@ function formatSummary(summary) {
     avgLossLeaks: Number(summary.avgLossLeaks.toFixed(2)),
     avgCoins: Number(summary.avgCoins.toFixed(0)),
     avgXp: Number(summary.avgXp.toFixed(0)),
+    towers: compactTowerSummary(summary),
   };
 }
 
-async function runCandidate({ mapIds, runs, workers, multipliers, seedStart }) {
+async function runCandidate({ mapIds, runs, workers, multipliers, seedStart, policyId }) {
   const byMap = {};
   for (const mapId of mapIds) {
     byMap[mapId] = await runManyParallel({
@@ -506,12 +829,13 @@ async function runCandidate({ mapIds, runs, workers, multipliers, seedStart }) {
       seedStart,
       workers,
       multipliers,
+      policyId,
     });
   }
   return byMap;
 }
 
-async function runSearch({ mapIds, searchRuns, workers }) {
+async function runSearch({ mapIds, searchRuns, workers, policyId }) {
   let best = null;
   let bestInBand = null;
   const top = [];
@@ -526,6 +850,7 @@ async function runSearch({ mapIds, searchRuns, workers }) {
           workers,
           multipliers,
           seedStart: 1,
+          policyId,
         });
         const score = scoreCandidate(byMap, multipliers, mapIds);
         const entry = { multipliers, byMap, score };
@@ -553,103 +878,258 @@ async function runSearch({ mapIds, searchRuns, workers }) {
   return { best, bestInBand, top };
 }
 
-function parseMapIds(raw) {
-  if (raw === 'all') {
-    return Object.keys(MAPS);
+async function runScenarioMatrix({ mapIds, scenarioIds, runs, workers, multipliers }) {
+  const matrix = {};
+  for (const policyId of scenarioIds) {
+    matrix[policyId] = await runCandidate({
+      mapIds,
+      runs,
+      workers,
+      multipliers,
+      seedStart: 101,
+      policyId,
+    });
   }
-  const requested = raw.split(',').map((id) => id.trim()).filter(Boolean);
-  if (!requested.length) {
-    return [DEFAULT_MAP_ID];
+  return matrix;
+}
+
+function summarizeDiversityFindings(matrix, mapIds) {
+  const findings = [];
+  for (const mapId of mapIds) {
+    const balanced = matrix.balanced?.[mapId];
+    if (!balanced) {
+      continue;
+    }
+    for (const policyId of MONO_POLICIES) {
+      const mono = matrix[policyId]?.[mapId];
+      if (!mono) {
+        continue;
+      }
+      const clearDelta = mono.clearRate - balanced.clearRate;
+      const leaksDelta = mono.avgLeaks - balanced.avgLeaks;
+      if (clearDelta > 0.12 || leaksDelta < -4.0) {
+        findings.push(
+          `[Imbalance] ${mapId}: ${policyId} appears overpowered vs balanced ` +
+          `(clearDelta=${(clearDelta * 100).toFixed(1)}pp leaksDelta=${leaksDelta.toFixed(2)}).`
+        );
+      }
+      if ((clearDelta < -0.5 && mono.clearRate < 0.25) || mono.clearRate < 0.02) {
+        findings.push(
+          `[Imbalance] ${mapId}: ${policyId} appears underpowered vs balanced ` +
+          `(clearRate=${(mono.clearRate * 100).toFixed(1)}%).`
+        );
+      }
+    }
   }
-  return requested.filter((id) => Boolean(MAPS[id]));
+  return findings;
+}
+
+async function runOatSensitivity({ mapIds, runs, workers, baseMultipliers, policyId }) {
+  const results = {};
+  for (const [factor, values] of Object.entries(OAT_GRID)) {
+    results[factor] = [];
+    for (const value of values) {
+      const multipliers = { ...baseMultipliers, [factor]: value };
+      const byMap = await runCandidate({
+        mapIds,
+        runs,
+        workers,
+        multipliers,
+        seedStart: 501,
+        policyId,
+      });
+      const aggregate = mapIds.reduce(
+        (acc, mapId) => {
+          acc.clearRate += byMap[mapId].clearRate;
+          acc.avgLeaks += byMap[mapId].avgLeaks;
+          return acc;
+        },
+        { clearRate: 0, avgLeaks: 0 }
+      );
+      aggregate.clearRate /= mapIds.length;
+      aggregate.avgLeaks /= mapIds.length;
+      results[factor].push({
+        value,
+        clearRate: Number((aggregate.clearRate * 100).toFixed(2)),
+        avgLeaks: Number(aggregate.avgLeaks.toFixed(2)),
+      });
+    }
+  }
+  return results;
+}
+
+function printMapSet(label, byMap, mapIds) {
+  console.log(`\n${label}`);
+  for (const mapId of mapIds) {
+    console.log(`\n${getMapById(mapId).name}`);
+    console.log(JSON.stringify(formatSummary(byMap[mapId]), null, 2));
+  }
+}
+
+function configuredWorkers(args, cudaDetected) {
+  if (cudaDetected) {
+    return Math.max(args.workers, Math.min(16, os.cpus()?.length || args.workers));
+  }
+  return args.workers;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mapIds = parseMapIds(args.maps);
+  const primaryPolicyIds = parsePolicyIds(args.policies);
+  const policyId = primaryPolicyIds[0] || 'balanced';
   const baselineMultipliers = { windSlowMult: 1, bombSplashMult: 1, fireDpsMult: 1 };
   const searchRuns = args.searchRuns || Math.max(80, Math.round(args.runs * SEARCH_FRACTION));
 
-  console.log('Homeland Monte Carlo Balance Simulation');
-  console.log(`runs=${args.runs} searchRuns=${searchRuns} workers=${args.workers}`);
-  console.log(`maps=${mapIds.join(', ')}`);
-
+  let cudaDetected = false;
   if (args.cuda) {
-    const cudaDetected = isCudaAvailable();
+    cudaDetected = isCudaAvailable();
+    if (!cudaDetected && args.cudaRequired) {
+      throw new Error('CUDA required but no NVIDIA runtime detected (nvidia-smi unavailable).');
+    }
+  }
+  const workers = configuredWorkers(args, cudaDetected);
+
+  console.log('Homeland Monte Carlo Balance Simulation');
+  console.log(`runs=${args.runs} searchRuns=${searchRuns} workers=${workers}`);
+  console.log(`maps=${mapIds.join(', ')}`);
+  console.log(`policy=${policyId}`);
+  if (args.cuda) {
     if (cudaDetected) {
-      console.log('CUDA detected, but JS prototype uses worker-thread CPU Monte Carlo path.');
+      console.log('CUDA detected: using high-throughput mode with expanded worker parallelism.');
     } else {
-      console.log('CUDA not detected. Using worker-thread CPU Monte Carlo path.');
+      console.log('CUDA not detected: falling back to CPU worker-thread parallelism.');
     }
   }
 
-  console.log('\nBaseline (current tower values)');
   const baseline = await runCandidate({
     mapIds,
     runs: args.runs,
-    workers: args.workers,
+    workers,
     multipliers: baselineMultipliers,
     seedStart: 1,
+    policyId,
   });
-  for (const mapId of mapIds) {
-    console.log(`\n${getMapById(mapId).name}`);
-    console.log(JSON.stringify(formatSummary(baseline[mapId]), null, 2));
-  }
+  printMapSet('Baseline (current tower values)', baseline, mapIds);
 
-  if (args.skipSearch) {
-    console.log('\nSearch skipped by --skip-search. Baseline values are the active tuned values.');
-    return;
-  }
+  let selectedMultipliers = baselineMultipliers;
+  if (!args.skipSearch) {
+    console.log('\nSearching multipliers...');
+    const search = await runSearch({ mapIds, searchRuns, workers, policyId });
+    const selected = search.bestInBand || search.best;
+    selectedMultipliers = selected.multipliers;
 
-  console.log('\nSearching multipliers...');
-  const search = await runSearch({ mapIds, searchRuns, workers: args.workers });
-
-  const selected = search.bestInBand || search.best;
-  console.log('\nBest candidate multipliers:', search.best.multipliers);
-  console.log('Selected tuned multipliers:', selected.multipliers);
-  if (search.bestInBand) {
-    console.log('Selection rule: in-target-band candidate closest to center.');
-  } else {
-    console.log('Selection rule: no full in-band candidate; chose global best score.');
-  }
-
-  console.log('\nTop candidates (aggregate score):');
-  for (const candidate of search.top) {
-    const mapMetrics = {};
-    for (const mapId of mapIds) {
-      mapMetrics[mapId] = {
-        qualityRate: Number((candidate.byMap[mapId].qualityRate * 100).toFixed(2)),
-        avgLeaks: Number(candidate.byMap[mapId].avgLeaks.toFixed(2)),
-      };
+    console.log('\nBest candidate multipliers:', search.best.multipliers);
+    console.log('Selected tuned multipliers:', selectedMultipliers);
+    if (search.bestInBand) {
+      console.log('Selection rule: in-target-band candidate closest to center.');
+    } else {
+      console.log('Selection rule: no full in-band candidate; chose global best score.');
     }
-    console.log(
-      JSON.stringify(
-        {
-          multipliers: candidate.multipliers,
-          score: Number(candidate.score.toFixed(3)),
-          maps: mapMetrics,
-        },
-        null,
-        2
-      )
-    );
+
+    console.log('\nTop candidates (aggregate score):');
+    for (const candidate of search.top) {
+      const mapMetrics = {};
+      for (const mapId of mapIds) {
+        mapMetrics[mapId] = {
+          qualityRate: Number((candidate.byMap[mapId].qualityRate * 100).toFixed(2)),
+          avgLeaks: Number(candidate.byMap[mapId].avgLeaks.toFixed(2)),
+        };
+      }
+      console.log(
+        JSON.stringify(
+          {
+            multipliers: candidate.multipliers,
+            score: Number(candidate.score.toFixed(3)),
+            maps: mapMetrics,
+          },
+          null,
+          2
+        )
+      );
+    }
+  } else {
+    console.log('\nSearch skipped by --skip-search. Baseline values are active.');
   }
 
-  console.log('\nFull verification with selected multipliers');
-  const tuned = await runCandidate({
+  const verified = await runCandidate({
     mapIds,
     runs: args.runs,
-    workers: args.workers,
-    multipliers: selected.multipliers,
+    workers,
+    multipliers: selectedMultipliers,
     seedStart: 1,
+    policyId,
   });
-  for (const mapId of mapIds) {
-    console.log(`\n${getMapById(mapId).name}`);
-    console.log(JSON.stringify(formatSummary(tuned[mapId]), null, 2));
+  printMapSet('Full verification (selected multipliers)', verified, mapIds);
+
+  if (args.suite === 'full') {
+    const diversityRuns = args.diversityRuns || Math.max(180, Math.round(args.runs * 0.35));
+    const oatRuns = args.oatRuns || Math.max(140, Math.round(args.runs * 0.28));
+    const scenarioIds = [
+      'balanced',
+      ...MONO_POLICIES,
+      'duo_bomb_fire',
+      'duo_arrow_wind',
+      'duo_fire_lightning',
+      'random_all',
+    ];
+
+    console.log(`\nDiversity suite (runs=${diversityRuns}, scenarios=${scenarioIds.length})...`);
+    const matrix = await runScenarioMatrix({
+      mapIds,
+      scenarioIds,
+      runs: diversityRuns,
+      workers,
+      multipliers: selectedMultipliers,
+    });
+
+    for (const scenarioId of scenarioIds) {
+      console.log(`\nScenario: ${POLICIES[scenarioId].label}`);
+      for (const mapId of mapIds) {
+        const summary = matrix[scenarioId][mapId];
+        console.log(
+          JSON.stringify(
+            {
+              mapId,
+              clearRate: Number((summary.clearRate * 100).toFixed(2)),
+              qualityRate: Number((summary.qualityRate * 100).toFixed(2)),
+              avgLeaks: Number(summary.avgLeaks.toFixed(2)),
+              entropy: Number(summary.diversityEntropy.toFixed(3)),
+              topTowerShare: Number(summary.topTowerShare.toFixed(3)),
+              avgBuilt: Object.fromEntries(
+                Object.entries(summary.avgTowerBuilt).map(([k, v]) => [k, Number(v.toFixed(2))])
+              ),
+            },
+            null,
+            2
+          )
+        );
+      }
+    }
+
+    const findings = summarizeDiversityFindings(matrix, mapIds);
+    console.log('\nDiversity findings:');
+    if (!findings.length) {
+      console.log('No major mono-tower dominance or collapse flags detected in this run.');
+    } else {
+      for (const finding of findings) {
+        console.log(finding);
+      }
+    }
+
+    console.log(`\nControlled OAT sensitivity (runs=${oatRuns})...`);
+    const oat = await runOatSensitivity({
+      mapIds,
+      runs: oatRuns,
+      workers,
+      baseMultipliers: selectedMultipliers,
+      policyId: 'balanced',
+    });
+    console.log(JSON.stringify(oat, null, 2));
   }
 
   const snapshot = snapshotTunables();
-  applyMultipliers(selected.multipliers);
+  applyMultipliers(selectedMultipliers);
   console.log('\nTuned values preview:');
   console.log(
     JSON.stringify(
@@ -678,19 +1158,24 @@ async function main() {
 }
 
 function runWorkerBatch() {
-  const { mapId, runs, seedStart, multipliers } = workerData;
+  const { mapId, runs, seedStart, multipliers, policyId } = workerData;
   const target = TARGETS[mapId] || TARGETS[DEFAULT_MAP_ID];
   const snapshot = snapshotTunables();
   applyMultipliers(multipliers);
 
   let agg = emptyAggregate();
   for (let i = 0; i < runs; i += 1) {
-    const result = runSingle(seedStart + i, mapId);
+    const result = runSingle(seedStart + i, mapId, policyId);
     agg.runs += 1;
     agg.wins += result.victory ? 1 : 0;
     agg.leaksSum += result.leaked;
     agg.coinsSum += result.coins;
     agg.xpSum += result.xp;
+
+    for (const id of TOWER_IDS) {
+      agg.towerBuiltTotals[id] += result.towerCounts[id];
+      agg.towerLevelTotals[id] += result.towerLevelSums[id];
+    }
 
     if (result.victory && result.leaked <= target.qualityLeakCap) {
       agg.qualityWins += 1;

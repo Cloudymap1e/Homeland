@@ -114,8 +114,22 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Required first attempt on GS75:
   - `cd /Users/rc/Project/Homeland`
   - `npm run balance:gs75`
-- The simulation runner performs CUDA detection when `--cuda` is enabled and should be treated as the default GS75 path.
-- If CUDA is unavailable on GS75, record that explicitly in the run notes and fall back to CPU worker-thread mode (do not silently skip CUDA attempt).
+- The simulation runner performs CUDA runtime detection when `--cuda` is enabled.
+- `balance:gs75` uses `--cuda-required`: it must fail fast if CUDA is unavailable.
+- If `balance:gs75` fails due missing CUDA runtime, record this explicitly and then run CPU fallback with:
+  - `npm run balance:sim`
+
+## Balancing Coverage Rule
+
+- Balance validation must include diversity and controlled-variable checks, not only a single mixed policy run.
+- Required coverage in a balancing cycle:
+  - mixed baseline (`balanced` policy),
+  - mono tower scenarios (arrow, bomb, fire, wind, lightning),
+  - duo tower scenarios (at least 3 combinations),
+  - OAT sensitivity for `windSlowMult`, `bombSplashMult`, `fireDpsMult`.
+- Use:
+  - `npm run balance:sim` for full search + diversity + OAT,
+  - `npm run balance:diversity` for faster no-search diversity/OAT reruns.
 
 ## Cloudflare Tunnel Publish (Required Hostname)
 
