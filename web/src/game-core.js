@@ -1,7 +1,7 @@
-import { MAP_CONFIG, TOWER_CONFIG, ENEMIES, WAVES, PROGRESSION } from './config.js';
+import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, ENEMIES, PROGRESSION } from './config.js';
 
 const WORLD_SCALE = 10;
-const CHAIN_RADIUS = 2.4;
+const CHAIN_RADIUS = 2.6;
 
 function distance(a, b) {
   const dx = a.x - b.x;
@@ -19,11 +19,11 @@ function getPathSegments(points) {
     segments.push({ a, b, len });
     total += len;
   }
-  return { segments, length: total };
+  return { points, segments, length: total };
 }
 
 function positionAtDistance(pathInfo, d) {
-  const points = MAP_CONFIG.pathWaypoints;
+  const points = pathInfo.points;
   if (d <= 0) {
     return points[0];
   }
@@ -45,16 +45,52 @@ function positionAtDistance(pathInfo, d) {
   return points[points.length - 1];
 }
 
+function pickWeightedIndex(weights) {
+  const valid = Array.isArray(weights) && weights.length > 0
+    ? weights
+    : [1];
+  const total = valid.reduce((sum, value) => sum + Math.max(0, value), 0);
+  if (total <= 0) {
+    return 0;
+  }
+  let threshold = Math.random() * total;
+  for (let i = 0; i < valid.length; i += 1) {
+    threshold -= Math.max(0, valid[i]);
+    if (threshold <= 0) {
+      return i;
+    }
+  }
+  return valid.length - 1;
+}
+
 export class HomelandGame {
-  constructor() {
-    this.pathInfo = getPathSegments(MAP_CONFIG.pathWaypoints);
+  constructor(options = {}) {
+    const mapId = options.mapId || DEFAULT_MAP_ID;
+    this.loadMap(mapId);
     this.reset();
   }
 
-  reset() {
+  loadMap(mapId) {
+    const next = MAPS[mapId] || MAPS[DEFAULT_MAP_ID];
+    this.mapId = next.mapId;
+    this.mapConfig = next;
+    this.waves = next.waves;
+    this.routeInfos = next.routes.map((route, routeIndex) => ({
+      routeId: route.id || `route_${routeIndex + 1}`,
+      routeIndex,
+      pathInfo: getPathSegments(route.waypoints),
+    }));
+  }
+
+  reset(options = {}) {
+    const resetMapId = options.mapId || this.mapId;
+    if (resetMapId !== this.mapId) {
+      this.loadMap(resetMapId);
+    }
+
     this.state = 'build_phase';
-    this.coins = MAP_CONFIG.startingCoins;
-    this.xp = MAP_CONFIG.startingXp;
+    this.coins = this.mapConfig.startingCoins;
+    this.xp = this.mapConfig.startingXp;
     this.waveIndex = -1;
     this.speed = 1;
     this.spawnCooldown = 0;
@@ -77,6 +113,10 @@ export class HomelandGame {
     this.speed = multiplier;
   }
 
+  setMap(mapId) {
+    this.reset({ mapId });
+  }
+
   buildTower(slotId, towerId) {
     if (!['build_phase', 'wave_result'].includes(this.state)) {
       return { ok: false, error: 'Can only build in build phase.' };
@@ -93,7 +133,7 @@ export class HomelandGame {
       return { ok: false, error: 'Insufficient coins.' };
     }
 
-    const slot = MAP_CONFIG.buildSlots.find((s) => s.id === slotId);
+    const slot = this.mapConfig.buildSlots.find((candidate) => candidate.id === slotId);
     if (!slot) {
       return { ok: false, error: 'Unknown slot.' };
     }
@@ -140,13 +180,14 @@ export class HomelandGame {
     if (!['build_phase', 'wave_result'].includes(this.state)) {
       return { ok: false, error: 'Cannot start wave in this state.' };
     }
-    if (this.waveIndex + 1 >= WAVES.length) {
+    if (this.waveIndex + 1 >= this.waves.length) {
       return { ok: false, error: 'No more waves.' };
     }
     this.waveIndex += 1;
-    const wave = WAVES[this.waveIndex];
-    this.spawnQueue = Object.entries(wave.composition)
-      .flatMap(([enemyType, count]) => Array(count).fill(enemyType));
+    const wave = this.waves[this.waveIndex];
+    this.spawnQueue = Object.entries(wave.composition).flatMap(([enemyType, count]) =>
+      Array(count).fill(enemyType)
+    );
     this.spawnCooldown = 0;
     this.state = 'wave_running';
     return { ok: true };
@@ -168,17 +209,32 @@ export class HomelandGame {
   }
 
   updateSpawns(dt) {
-    const wave = WAVES[this.waveIndex];
+    const wave = this.waves[this.waveIndex];
     this.spawnCooldown -= dt;
     while (this.spawnQueue.length > 0 && this.spawnCooldown <= 0) {
       const enemyType = this.spawnQueue.shift();
-      this.spawnEnemy(enemyType);
+      this.spawnEnemy(enemyType, wave.routeWeights || this.mapConfig.defaultRouteWeights);
       this.spawnCooldown += wave.spawnInterval;
     }
   }
 
-  spawnEnemy(enemyType) {
+  getEnemyTemplate(enemyType) {
     const template = ENEMIES[enemyType];
+    const scale = this.mapConfig.enemyScale || { hp: 1, speed: 1, rewards: 1 };
+    return {
+      hp: Math.round(template.hp * scale.hp),
+      speed: template.speed * scale.speed,
+      coinReward: Math.round(template.coinReward * scale.rewards),
+      xpReward: Math.round(template.xpReward * scale.rewards),
+    };
+  }
+
+  spawnEnemy(enemyType, routeWeights) {
+    const template = this.getEnemyTemplate(enemyType);
+    const chosenRoute = pickWeightedIndex(routeWeights);
+    const routeIndex = Math.min(chosenRoute, this.routeInfos.length - 1);
+    const routeInfo = this.routeInfos[routeIndex];
+
     this.enemies.push({
       id: `enemy_${this.nextEnemyId}`,
       enemyType,
@@ -188,6 +244,8 @@ export class HomelandGame {
       coinReward: template.coinReward,
       xpReward: template.xpReward,
       distance: 0,
+      routeIndex,
+      routeLength: routeInfo.pathInfo.length,
       burnDps: 0,
       burnDurationLeft: 0,
       slowPercent: 0,
@@ -197,11 +255,16 @@ export class HomelandGame {
     this.stats.spawned += 1;
   }
 
+  getEnemyWorldPosition(enemy) {
+    const routeInfo = this.routeInfos[enemy.routeIndex] || this.routeInfos[0];
+    return positionAtDistance(routeInfo.pathInfo, enemy.distance);
+  }
+
   updateEffects(dt) {
     for (const zone of this.fireZones) {
       zone.durationLeft = Math.max(0, zone.durationLeft - dt);
       for (const enemy of this.enemies) {
-        const enemyPos = positionAtDistance(this.pathInfo, enemy.distance);
+        const enemyPos = this.getEnemyWorldPosition(enemy);
         const d = Math.hypot(
           (enemyPos.x - zone.x) * WORLD_SCALE,
           (enemyPos.y - zone.y) * WORLD_SCALE
@@ -275,19 +338,24 @@ export class HomelandGame {
       target.hp -= levelCfg.damage;
       this.lastAttacks.push({
         from: { x: tower.x, y: tower.y },
-        to: positionAtDistance(this.pathInfo, target.distance),
+        to: this.getEnemyWorldPosition(target),
         effectType: cfg.effectType,
       });
 
       if (cfg.effectType === 'lightning') {
-        this.applyLightningChain(target, levelCfg.damage, levelCfg.chainFalloff || 0, levelCfg.chainCount || 0);
+        this.applyLightningChain(
+          target,
+          levelCfg.damage,
+          levelCfg.chainFalloff || 0,
+          levelCfg.chainCount || 0
+        );
       }
     }
   }
 
   applyFireball(tower, target, levelCfg) {
     target.hp -= levelCfg.damage;
-    const targetPos = positionAtDistance(this.pathInfo, target.distance);
+    const targetPos = this.getEnemyWorldPosition(target);
     this.lastAttacks.push({
       from: { x: tower.x, y: tower.y },
       to: targetPos,
@@ -310,7 +378,7 @@ export class HomelandGame {
       target.slowDurationLeft = Math.max(target.slowDurationLeft, levelCfg.slowDuration || 0);
       this.lastAttacks.push({
         from: { x: tower.x, y: tower.y },
-        to: positionAtDistance(this.pathInfo, target.distance),
+        to: this.getEnemyWorldPosition(target),
         effectType: 'wind',
       });
     }
@@ -318,7 +386,7 @@ export class HomelandGame {
 
   applyBombSplash(tower, target, levelCfg) {
     target.hp -= levelCfg.damage;
-    const targetPos = positionAtDistance(this.pathInfo, target.distance);
+    const targetPos = this.getEnemyWorldPosition(target);
     const splashRadius = levelCfg.splashRadius || 0;
     const splashDamage = levelCfg.damage * (1 - (levelCfg.splashFalloff || 0) / 100);
 
@@ -336,7 +404,7 @@ export class HomelandGame {
       if (enemy.id === target.id) {
         continue;
       }
-      const enemyPos = positionAtDistance(this.pathInfo, enemy.distance);
+      const enemyPos = this.getEnemyWorldPosition(enemy);
       const d = Math.hypot(
         (enemyPos.x - targetPos.x) * WORLD_SCALE,
         (enemyPos.y - targetPos.y) * WORLD_SCALE
@@ -354,11 +422,15 @@ export class HomelandGame {
 
   getTargetsInRange(tower, rangeUnits, maxTargets = 1) {
     const inRange = this.enemies.filter((enemy) => {
-      const pos = positionAtDistance(this.pathInfo, enemy.distance);
+      const pos = this.getEnemyWorldPosition(enemy);
       const d = Math.hypot((tower.x - pos.x) * WORLD_SCALE, (tower.y - pos.y) * WORLD_SCALE);
       return d <= rangeUnits;
     });
-    inRange.sort((a, b) => b.distance - a.distance);
+    inRange.sort((a, b) => {
+      const ap = a.routeLength === 0 ? 0 : a.distance / a.routeLength;
+      const bp = b.routeLength === 0 ? 0 : b.distance / b.routeLength;
+      return bp - ap;
+    });
     return inRange.slice(0, Math.max(1, maxTargets));
   }
 
@@ -366,11 +438,11 @@ export class HomelandGame {
     if (chainCount <= 0) {
       return;
     }
-    const sourcePos = positionAtDistance(this.pathInfo, sourceEnemy.distance);
+    const sourcePos = this.getEnemyWorldPosition(sourceEnemy);
     const available = this.enemies
       .filter((enemy) => enemy.id !== sourceEnemy.id)
       .map((enemy) => {
-        const pos = positionAtDistance(this.pathInfo, enemy.distance);
+        const pos = this.getEnemyWorldPosition(enemy);
         const d = Math.hypot((sourcePos.x - pos.x) * WORLD_SCALE, (sourcePos.y - pos.y) * WORLD_SCALE);
         return { enemy, d };
       })
@@ -393,12 +465,12 @@ export class HomelandGame {
   updateMovement(dt) {
     const survivors = [];
     for (const enemy of this.enemies) {
-      const slowMultiplier = 1 - Math.min(enemy.slowPercent / 100, 0.8);
+      const slowMultiplier = 1 - Math.min(enemy.slowPercent / 100, 0.84);
       enemy.distance += enemy.speed * slowMultiplier * dt;
 
-      if (enemy.distance >= this.pathInfo.length) {
-        this.coins -= MAP_CONFIG.leakPenalty.coins;
-        this.xp = Math.max(0, this.xp - MAP_CONFIG.leakPenalty.xp);
+      if (enemy.distance >= enemy.routeLength) {
+        this.coins -= this.mapConfig.leakPenalty.coins;
+        this.xp = Math.max(0, this.xp - this.mapConfig.leakPenalty.xp);
         this.stats.leaked += 1;
       } else {
         survivors.push(enemy);
@@ -408,7 +480,11 @@ export class HomelandGame {
 
     if (this.coins < 0) {
       this.state = 'map_result';
-      this.result = { victory: false, nextMapUnlocked: false };
+      this.result = {
+        victory: false,
+        mapId: this.mapConfig.mapId,
+        nextMapUnlocked: false,
+      };
     }
   }
 
@@ -421,15 +497,16 @@ export class HomelandGame {
       return;
     }
 
-    this.xp += PROGRESSION.xpPerWaveClear;
+    this.xp += PROGRESSION.xpPerWaveClear + (this.mapConfig.xpWaveBonus || 0);
     this.state = 'wave_result';
 
-    if (this.waveIndex === WAVES.length - 1) {
-      this.xp += PROGRESSION.xpMapClear;
+    if (this.waveIndex === this.waves.length - 1) {
+      this.xp += PROGRESSION.xpMapClear + (this.mapConfig.xpMapBonus || 0);
       this.state = 'map_result';
       this.result = {
         victory: true,
-        nextMapUnlocked: this.xp >= MAP_CONFIG.unlockRequirement.minXp,
+        mapId: this.mapConfig.mapId,
+        nextMapUnlocked: this.xp >= this.mapConfig.unlockRequirement.minXp,
       };
     } else {
       this.state = 'build_phase';
@@ -438,14 +515,16 @@ export class HomelandGame {
 
   getSnapshot() {
     return {
+      mapId: this.mapConfig.mapId,
+      mapName: this.mapConfig.name,
       state: this.state,
       coins: this.coins,
       xp: this.xp,
       wave: this.waveIndex + 1,
-      totalWaves: WAVES.length,
+      totalWaves: this.waves.length,
       boatsLeft: this.spawnQueue.length + this.enemies.length,
       result: this.result,
-      nextMapUnlocked: this.xp >= MAP_CONFIG.unlockRequirement.minXp,
+      nextMapUnlocked: this.xp >= this.mapConfig.unlockRequirement.minXp,
       leaked: this.stats.leaked,
       killed: this.stats.killed,
       spawned: this.stats.spawned,
@@ -457,6 +536,12 @@ export class HomelandGame {
   }
 }
 
-export function getPathPosition(game, distanceValue) {
-  return positionAtDistance(game.pathInfo, distanceValue);
+export function getPathPosition(game, distanceValue, routeIndex = 0) {
+  const route = game.routeInfos[routeIndex] || game.routeInfos[0];
+  return positionAtDistance(route.pathInfo, distanceValue);
 }
+
+export function getEnemyPosition(game, enemy) {
+  return game.getEnemyWorldPosition(enemy);
+}
+
