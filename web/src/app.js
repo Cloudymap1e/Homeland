@@ -595,7 +595,7 @@ function rebuildCurveTowerSelect() {
 }
 
 function canModifyTowers() {
-  return ['build_phase', 'wave_result'].includes(game.state);
+  return ['build_phase', 'wave_running', 'wave_result'].includes(game.state);
 }
 
 function closeSlotPopout() {
@@ -703,7 +703,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
     ? 'Upgrade or inspect this tower.'
     : buildPhase
       ? 'Pick a tower to build on this slot.'
-      : 'Building is locked while the wave is active.';
+      : 'Building is locked right now.';
   elSlotPopout.appendChild(helper);
 
   const meta = document.createElement('div');
@@ -762,7 +762,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
     actions.appendChild(
       createPopoutAction(
         canUpgrade ? `Upgrade to L${tower.level + 1} - ${formatNumber(nextCost)}c` : 'Max level reached',
-        canUpgrade ? 'Upgrade only during build/wave clear phases.' : 'This tower is already at level cap.',
+        canUpgrade ? 'Upgrade anytime except map-result state.' : 'This tower is already at level cap.',
         () => {
           const result = game.upgradeTower(slot.id);
           slotPopoutNotice = result.ok ? '' : result.error;

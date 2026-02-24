@@ -191,8 +191,8 @@ export class HomelandGame {
   }
 
   buildTower(slotId, towerId) {
-    if (!['build_phase', 'wave_result'].includes(this.state)) {
-      return { ok: false, error: 'Can only build in build phase.' };
+    if (!['build_phase', 'wave_running', 'wave_result'].includes(this.state)) {
+      return { ok: false, error: 'Cannot build in current state.' };
     }
     if (this.towers.has(slotId)) {
       return { ok: false, error: 'Slot already occupied.' };
@@ -229,8 +229,8 @@ export class HomelandGame {
   }
 
   upgradeTower(slotId) {
-    if (!['build_phase', 'wave_result'].includes(this.state)) {
-      return { ok: false, error: 'Can only upgrade in build phase.' };
+    if (!['build_phase', 'wave_running', 'wave_result'].includes(this.state)) {
+      return { ok: false, error: 'Cannot upgrade in current state.' };
     }
     const tower = this.towers.get(slotId);
     if (!tower) {

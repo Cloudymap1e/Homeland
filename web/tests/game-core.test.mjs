@@ -31,6 +31,7 @@ function addEnemy(game, id, distance, hp = 600) {
     burnDurationLeft: 0,
     slowPercent: 0,
     slowDurationLeft: 0,
+    shockDurationLeft: 0,
   });
 }
 
@@ -62,6 +63,25 @@ test('build and upgrade deduct coins correctly', () => {
 
   const tower = game.getTower('s01');
   assert.equal(tower.level, 2);
+});
+
+test('build and upgrade are allowed during active wave', () => {
+  const game = new HomelandGame();
+  const level1Cost = TOWER_CONFIG.arrow.levels[0].cost;
+  const level2Cost = TOWER_CONFIG.arrow.levels[1].cost;
+
+  const startRes = game.startNextWave();
+  assert.equal(startRes.ok, true);
+  assert.equal(game.state, 'wave_running');
+
+  const buildRes = game.buildTower('s01', 'arrow');
+  assert.equal(buildRes.ok, true);
+
+  const upRes = game.upgradeTower('s01');
+  assert.equal(upRes.ok, true);
+
+  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost - level2Cost);
+  assert.equal(game.getTower('s01')?.level, 2);
 });
 
 test('river-overlap slots are blocked for placement', () => {
@@ -125,13 +145,35 @@ test('fireball zone persists for 3 seconds and deals area damage', () => {
   game.updateTowerAttacks(0.1);
   assert.equal(game.fireZones.length, 1);
   assert.ok(game.fireZones[0].durationLeft <= 3.0 && game.fireZones[0].durationLeft > 2.8);
+  assert.ok(game.enemies[0].burnDurationLeft > 0);
+  assert.ok(game.enemies[0].burnDps > 0);
 
   const hpAfterImpact = game.enemies[0].hp;
+  game.enemies[0].distance = 0.1; // move outside the fire zone to isolate burn damage.
   game.updateEffects(1.0);
   assert.ok(game.enemies[0].hp < hpAfterImpact);
 
   game.updateEffects(2.1);
   assert.equal(game.fireZones.length, 0);
+});
+
+test('lightning applies shock state to primary and chained boats', () => {
+  const game = new HomelandGame();
+  addEnemy(game, 'l1', 5.1, 1400);
+  addEnemy(game, 'l2', 5.2, 1400);
+  addTower(game, 'magic_lightning', 1, 5.0);
+
+  game.updateTowerAttacks(0.1);
+
+  const primary = game.enemies.find((enemy) => enemy.id === 'l1');
+  const chained = game.enemies.find((enemy) => enemy.id === 'l2');
+  assert.ok(primary.shockDurationLeft > 0);
+  assert.ok(chained.shockDurationLeft > 0);
+  assert.ok(game.lastAttacks.some((attack) => attack.effectType === 'lightning_chain'));
+
+  const primaryShockBefore = primary.shockDurationLeft;
+  game.updateEffects(0.3);
+  assert.ok(primary.shockDurationLeft < primaryShockBefore);
 });
 
 test('bomb tower applies splash damage to nearby fleets', () => {
