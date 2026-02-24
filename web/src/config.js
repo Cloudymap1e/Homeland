@@ -43,9 +43,9 @@ export const TOWER_CONFIG = {
     name: 'Bomb Tower',
     effectType: 'bomb',
     levels: [
-      { level: 1, cost: 700, damage: 120, range: 2.6, attackSpeed: 0.52, splashRadius: 1.0, splashFalloff: 45 },
-      { level: 2, cost: 600, damage: 170, range: 2.8, attackSpeed: 0.56, splashRadius: 1.2, splashFalloff: 40 },
-      { level: 3, cost: 900, damage: 230, range: 3.0, attackSpeed: 0.6, splashRadius: 1.4, splashFalloff: 35 },
+      { level: 1, cost: 700, damage: 120, range: 2.6, attackSpeed: 0.52, splashRadius: 1.4, splashFalloff: 45 },
+      { level: 2, cost: 600, damage: 170, range: 2.8, attackSpeed: 0.56, splashRadius: 1.68, splashFalloff: 40 },
+      { level: 3, cost: 900, damage: 230, range: 3.0, attackSpeed: 0.6, splashRadius: 1.96, splashFalloff: 35 },
     ],
   },
   magic_fire: {
@@ -63,9 +63,9 @@ export const TOWER_CONFIG = {
     name: 'Magic Wind',
     effectType: 'wind',
     levels: [
-      { level: 1, cost: 760, damage: 14, range: 3.0, attackSpeed: 0.92, slowPercent: 26, slowDuration: 2.2, windTargets: 3 },
-      { level: 2, cost: 650, damage: 20, range: 3.2, attackSpeed: 0.95, slowPercent: 34, slowDuration: 2.5, windTargets: 5 },
-      { level: 3, cost: 980, damage: 28, range: 3.4, attackSpeed: 0.98, slowPercent: 42, slowDuration: 2.8, windTargets: 6 },
+      { level: 1, cost: 760, damage: 14, range: 3.0, attackSpeed: 0.92, slowPercent: 34, slowDuration: 2.2, windTargets: 3 },
+      { level: 2, cost: 650, damage: 20, range: 3.2, attackSpeed: 0.95, slowPercent: 44, slowDuration: 2.5, windTargets: 5 },
+      { level: 3, cost: 980, damage: 28, range: 3.4, attackSpeed: 0.98, slowPercent: 55, slowDuration: 2.8, windTargets: 6 },
     ],
   },
   magic_lightning: {
