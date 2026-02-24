@@ -4,3 +4,6 @@ __pycache__/
 .cloudflared/config.yml
 .cloudflared/*.json
 .playwright-cli/
+node_modules/
+test-results/
+playwright-report/
