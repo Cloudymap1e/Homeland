@@ -200,7 +200,31 @@ These numbers should be moved to config and tuned after first playable tests.
 - Engineering plan: `/Users/rc/Project/Homeland/docs/action-plan.md`
 - Sprint task list: `/Users/rc/Project/Homeland/docs/task-list.md`
 
+## Prototype Runtime
+
+Core gameplay systems are now implemented in a headless Python prototype:
+- config loader and validation,
+- map pathing and wave spawning,
+- tower placement, upgrades, and combat,
+- coin and XP progression rules,
+- state machine and map result flow,
+- automated tests for core mechanics.
+
+Run local simulation:
+
+```bash
+cd /Users/rc/Project/Homeland
+PYTHONPATH=src python3 -m homeland
+```
+
+Run tests:
+
+```bash
+cd /Users/rc/Project/Homeland
+pytest
+```
+
 ## Current Status
 
-This repository now includes concrete prototype planning documents.
-Next step is to execute the task list in order and ship the first playable map.
+Prototype foundation and core loop logic are implemented and tested.
+Next step is to build the visual/UI prototype layer on top of these systems.
