@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Homeland: River Defense Prototype</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="panel">
+        <h1>Homeland</h1>
+        <p class="subtitle">River Defense Prototype (JS)</p>
+
+        <section>
+          <h2>Resources</h2>
+          <div class="stats">
+            <div>Coins: <strong id="coins">0</strong></div>
+            <div>XP: <strong id="xp">0</strong></div>
+            <div>Wave: <strong id="wave">0/0</strong></div>
+            <div>Boats Left: <strong id="boats-left">0</strong></div>
+            <div>State: <strong id="state">build_phase</strong></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Build</h2>
+          <div id="tower-buttons" class="tower-buttons"></div>
+        </section>
+
+        <section>
+          <h2>Actions</h2>
+          <div class="actions">
+            <button id="start-wave">Start Wave</button>
+            <button id="toggle-speed">Speed 1x</button>
+            <button id="reset">Reset Run</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Selection</h2>
+          <div id="selection" class="selection">No slot selected.</div>
+          <button id="upgrade" disabled>Upgrade Tower</button>
+        </section>
+
+        <section>
+          <h2>Result</h2>
+          <div id="result" class="result">In progress.</div>
+        </section>
+      </aside>
+
+      <main class="game-area">
+        <canvas id="game" width="1100" height="680"></canvas>
+      </main>
+    </div>
+
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

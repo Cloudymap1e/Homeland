@@ -1,0 +1,12 @@
+{
+  "name": "homeland-web-prototype",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node --test web/tests/*.test.mjs",
+    "tunnel:quick": "cloudflared tunnel --url http://localhost:4173",
+    "tunnel:run": "cloudflared tunnel run homeland-web"
+  }
+}

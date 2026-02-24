@@ -1,0 +1,7 @@
+tunnel: <TUNNEL_UUID>
+credentials-file: /Users/<USER>/.cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: homeland.secana.top
+    service: http://127.0.0.1:4173
+  - service: http_status:404
