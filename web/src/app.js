@@ -44,6 +44,7 @@ let autoContinueEnabled = false;
 let fastForwardUntilMs = 0;
 let curveDirty = true;
 let slotPopoutNotice = '';
+let slotPopoutRenderKey = '';
 let reportPanelVisible = true;
 let curvePanelVisible = true;
 
@@ -600,6 +601,7 @@ function canModifyTowers() {
 function closeSlotPopout() {
   elSlotPopout.classList.add('hidden');
   elSlotPopout.innerHTML = '';
+  slotPopoutRenderKey = '';
 }
 
 function slotSpecialLines(cfg, levelCfg) {
@@ -665,6 +667,17 @@ function createPopoutAction(label, detail, onClick, disabled = false) {
     onClick();
   });
   return button;
+}
+
+function slotPopoutStateKey(slotId = selectedSlotId) {
+  const slot = slotId ? game.getBuildSlots().find((candidate) => candidate.id === slotId) : null;
+  if (!slot) {
+    return '';
+  }
+  const tower = game.getTower(slot.id);
+  const towerKey = tower ? `${tower.towerId}:${tower.level}` : 'empty';
+  const coinsKey = canModifyTowers() ? game.coins : 'locked';
+  return [slot.id, towerKey, game.state, coinsKey, slotPopoutNotice].join('|');
 }
 
 function renderSlotPopout(slotId = selectedSlotId) {
@@ -783,10 +796,15 @@ function renderSlotPopout(slotId = selectedSlotId) {
 
   markCurveDirty();
   positionSlotPopout(slot);
+  slotPopoutRenderKey = slotPopoutStateKey(slot.id);
 }
 
 function refreshSlotPopout() {
   if (elSlotPopout.classList.contains('hidden')) {
+    return;
+  }
+  const nextKey = slotPopoutStateKey(selectedSlotId);
+  if (!nextKey || nextKey === slotPopoutRenderKey) {
     return;
   }
   renderSlotPopout(selectedSlotId);
