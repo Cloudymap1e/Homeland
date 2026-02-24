@@ -18,11 +18,19 @@ const curveCanvas = document.getElementById('curve-chart');
 const curveCtx = curveCanvas.getContext('2d');
 const elCurveSummary = document.getElementById('curve-summary');
 const elSlotPopout = document.getElementById('slot-popout');
+const elResultWindow = document.getElementById('result-window');
+const elCurveWindow = document.getElementById('curve-window');
+const elResultHandle = document.getElementById('result-handle');
+const elCurveHandle = document.getElementById('curve-handle');
 
 const btnStartWave = document.getElementById('start-wave');
 const btnToggleSpeed = document.getElementById('toggle-speed');
 const btnFastForwardWave = document.getElementById('fast-forward-wave');
 const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
+const btnToggleReportPanel = document.getElementById('toggle-report-panel');
+const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
+const btnHideReportPanel = document.getElementById('hide-report-panel');
+const btnHideCurvePanel = document.getElementById('hide-curve-panel');
 const btnReset = document.getElementById('reset');
 const btnLoadMap = document.getElementById('load-map');
 
@@ -36,6 +44,8 @@ let autoContinueEnabled = false;
 let fastForwardUntilMs = 0;
 let curveDirty = true;
 let slotPopoutNotice = '';
+let reportPanelVisible = true;
+let curvePanelVisible = true;
 
 const SLOT_RADIUS = 16;
 const WORLD_SCALE = 10;
@@ -300,6 +310,97 @@ function resizeCanvasToViewport() {
   riverLayer.height = nextHeight;
   buildStaticMapLayers();
   refreshSlotPopout();
+}
+
+function updatePanelButtons() {
+  btnToggleReportPanel.textContent = reportPanelVisible ? 'Hide Report' : 'Show Report';
+  btnToggleCurvePanel.textContent = curvePanelVisible ? 'Hide Curves' : 'Show Curves';
+  btnToggleReportPanel.classList.toggle('active', reportPanelVisible);
+  btnToggleCurvePanel.classList.toggle('active', curvePanelVisible);
+}
+
+function setPanelVisibility(panelId, visible) {
+  if (panelId === 'report') {
+    reportPanelVisible = visible;
+    elResultWindow.classList.toggle('hidden-window', !visible);
+  } else if (panelId === 'curve') {
+    curvePanelVisible = visible;
+    elCurveWindow.classList.toggle('hidden-window', !visible);
+  }
+  updatePanelButtons();
+}
+
+function makeWindowDraggable(windowEl, handleEl) {
+  let dragState = null;
+
+  const stopDrag = (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+    handleEl.releasePointerCapture(event.pointerId);
+    windowEl.classList.remove('dragging');
+    dragState = null;
+  };
+
+  handleEl.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    if (event.target.closest('button, select, input')) {
+      return;
+    }
+
+    const rect = windowEl.getBoundingClientRect();
+    windowEl.style.left = `${Math.round(rect.left)}px`;
+    windowEl.style.top = `${Math.round(rect.top)}px`;
+    windowEl.style.right = 'auto';
+    windowEl.style.bottom = 'auto';
+
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originLeft: rect.left,
+      originTop: rect.top,
+    };
+    handleEl.setPointerCapture(event.pointerId);
+    windowEl.classList.add('dragging');
+    event.preventDefault();
+  });
+
+  handleEl.addEventListener('pointermove', (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+    const dx = event.clientX - dragState.startX;
+    const dy = event.clientY - dragState.startY;
+    const maxLeft = Math.max(0, window.innerWidth - windowEl.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - windowEl.offsetHeight);
+    const left = Math.max(0, Math.min(maxLeft, dragState.originLeft + dx));
+    const top = Math.max(0, Math.min(maxTop, dragState.originTop + dy));
+    windowEl.style.left = `${Math.round(left)}px`;
+    windowEl.style.top = `${Math.round(top)}px`;
+  });
+
+  handleEl.addEventListener('pointerup', stopDrag);
+  handleEl.addEventListener('pointercancel', stopDrag);
+}
+
+function clampHudWindowsToViewport() {
+  for (const windowEl of [elResultWindow, elCurveWindow]) {
+    if (windowEl.classList.contains('hidden-window')) {
+      continue;
+    }
+    if (!windowEl.style.left || !windowEl.style.top) {
+      continue;
+    }
+    const maxLeft = Math.max(0, window.innerWidth - windowEl.offsetWidth);
+    const maxTop = Math.max(0, window.innerHeight - windowEl.offsetHeight);
+    const left = Math.max(0, Math.min(maxLeft, Number.parseFloat(windowEl.style.left)));
+    const top = Math.max(0, Math.min(maxTop, Number.parseFloat(windowEl.style.top)));
+    windowEl.style.left = `${Math.round(left)}px`;
+    windowEl.style.top = `${Math.round(top)}px`;
+  }
 }
 
 function rebuildMapSelect() {
@@ -1306,6 +1407,24 @@ btnToggleAutoContinue.addEventListener('click', () => {
   updateHud();
 });
 
+btnToggleReportPanel.addEventListener('click', () => {
+  setPanelVisibility('report', !reportPanelVisible);
+});
+
+btnToggleCurvePanel.addEventListener('click', () => {
+  setPanelVisibility('curve', !curvePanelVisible);
+});
+
+btnHideReportPanel.addEventListener('click', (event) => {
+  event.stopPropagation();
+  setPanelVisibility('report', false);
+});
+
+btnHideCurvePanel.addEventListener('click', (event) => {
+  event.stopPropagation();
+  setPanelVisibility('curve', false);
+});
+
 btnReset.addEventListener('click', () => {
   game.reset();
   selectedSlotId = null;
@@ -1326,13 +1445,35 @@ elCurveTower.addEventListener('change', () => {
   updateCurveVisualization(true);
 });
 
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    if (!elSlotPopout.classList.contains('hidden')) {
+      selectedSlotId = null;
+      slotPopoutNotice = '';
+      closeSlotPopout();
+      return;
+    }
+    if (curvePanelVisible) {
+      setPanelVisibility('curve', false);
+      return;
+    }
+    if (reportPanelVisible) {
+      setPanelVisibility('report', false);
+    }
+  }
+});
+
 window.addEventListener('resize', () => {
   resizeCanvasToViewport();
+  clampHudWindowsToViewport();
 });
 
 rebuildMapSelect();
 rebuildCurveTowerSelect();
 resizeCanvasToViewport();
+makeWindowDraggable(elResultWindow, elResultHandle);
+makeWindowDraggable(elCurveWindow, elCurveHandle);
+updatePanelButtons();
 updateMapMeta();
 updateHud();
 requestAnimationFrame(gameLoop);

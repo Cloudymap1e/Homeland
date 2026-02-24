@@ -23,6 +23,8 @@
           <button id="toggle-speed">Speed 1x</button>
           <button id="fast-forward-wave">Fast 1s Fleet Run</button>
           <button id="toggle-auto-continue">Auto Continue: Off</button>
+          <button id="toggle-report-panel">Hide Report</button>
+          <button id="toggle-curve-panel">Hide Curves</button>
           <button id="reset">Reset Run</button>
         </div>
         <div id="map-meta" class="map-meta"></div>
@@ -55,24 +57,33 @@
         </div>
       </div>
 
-      <section class="bottom-dock">
-        <div class="dock-panel result-panel">
+      <section id="result-window" class="hud-window result-panel">
+        <header id="result-handle" class="window-head">
           <h2>Battle Report</h2>
-          <div id="result" class="result">In progress.</div>
-        </div>
-        <div class="dock-panel curve-panel">
-          <div class="curve-header">
-            <h2>Tower Curves</h2>
+          <button id="hide-report-panel" class="window-close" type="button" aria-label="Close battle report">
+            x
+          </button>
+        </header>
+        <div id="result" class="result">In progress.</div>
+      </section>
+
+      <section id="curve-window" class="hud-window curve-panel">
+        <header id="curve-handle" class="window-head">
+          <h2>Tower Curves</h2>
+          <div class="curve-head-controls">
             <select id="curve-tower"></select>
+            <button id="hide-curve-panel" class="window-close" type="button" aria-label="Close tower curves">
+              x
+            </button>
           </div>
-          <canvas id="curve-chart" width="280" height="220"></canvas>
-          <div id="curve-summary" class="curve-summary"></div>
-        </div>
+        </header>
+        <canvas id="curve-chart" width="280" height="220"></canvas>
+        <div id="curve-summary" class="curve-summary"></div>
       </section>
 
       <section id="slot-popout" class="slot-popout hidden" aria-live="polite"></section>
     </main>
 
-    <script type="module" src="/src/app.js?v=campaign-pass-2"></script>
+    <script type="module" src="/src/app.js?v=campaign-pass-3"></script>
   </body>
 </html>
