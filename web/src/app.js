@@ -18,6 +18,8 @@ const elMapMeta = document.getElementById('map-meta');
 
 const btnStartWave = document.getElementById('start-wave');
 const btnToggleSpeed = document.getElementById('toggle-speed');
+const btnFastForwardWave = document.getElementById('fast-forward-wave');
+const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
 const btnReset = document.getElementById('reset');
 const btnUpgrade = document.getElementById('upgrade');
 const btnLoadMap = document.getElementById('load-map');
@@ -27,10 +29,14 @@ let selectedTowerId = 'arrow';
 let selectedSlotId = null;
 let lastTime = performance.now();
 let simTime = 0;
+let autoContinueEnabled = false;
+let fastForwardUntilMs = 0;
 
 const SLOT_RADIUS = 16;
 const WORLD_SCALE = 10;
 const EFFECT_LIMIT = 520;
+const FAST_FORWARD_STEP_DT = 0.2;
+const FAST_FORWARD_STEPS_PER_FRAME = 120;
 
 const visualEffects = [];
 
@@ -363,6 +369,8 @@ function updateHud() {
 
   btnStartWave.disabled = !['build_phase', 'wave_result'].includes(game.state);
   btnToggleSpeed.textContent = `Speed ${game.speed}x`;
+  btnFastForwardWave.textContent = fastForwardUntilMs > 0 ? 'Fast 1s Fleet Run (Active)' : 'Fast 1s Fleet Run';
+  btnToggleAutoContinue.textContent = `Auto Continue: ${autoContinueEnabled ? 'On' : 'Off'}`;
   updateSelectionText();
 }
 
@@ -810,11 +818,28 @@ function render() {
 function gameLoop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.06);
   lastTime = now;
-  simTime += dt;
+  handleAutoContinue();
 
-  game.tick(dt);
-  ingestAttackVisuals();
-  updateVisualEffects(dt);
+  const fastForwardActive = fastForwardUntilMs > 0 && game.state === 'wave_running';
+  if (fastForwardActive) {
+    for (let i = 0; i < FAST_FORWARD_STEPS_PER_FRAME && game.state === 'wave_running'; i += 1) {
+      game.tick(FAST_FORWARD_STEP_DT);
+    }
+    simTime += FAST_FORWARD_STEP_DT * FAST_FORWARD_STEPS_PER_FRAME;
+    visualEffects.length = 0;
+    if (game.state !== 'wave_running' || now >= fastForwardUntilMs) {
+      fastForwardUntilMs = 0;
+    }
+  } else {
+    simTime += dt;
+    if (fastForwardUntilMs > 0 && game.state !== 'wave_running') {
+      fastForwardUntilMs = 0;
+    }
+    game.tick(dt);
+    ingestAttackVisuals();
+    updateVisualEffects(dt);
+  }
+
   render();
   updateHud();
 
@@ -838,9 +863,51 @@ function pickSlotFromMouse(clientX, clientY) {
 function loadSelectedMap() {
   game.setMap(elMapSelect.value);
   selectedSlotId = null;
+  fastForwardUntilMs = 0;
   buildStaticMapLayers();
   updateMapMeta();
   updateHud();
+}
+
+function triggerFastForwardWave() {
+  if (['build_phase', 'wave_result'].includes(game.state)) {
+    game.startNextWave();
+  }
+  if (game.state !== 'wave_running') {
+    fastForwardUntilMs = 0;
+    return;
+  }
+  fastForwardUntilMs = performance.now() + 1000;
+}
+
+function maybeAutoAdvanceMap() {
+  if (game.state !== 'map_result' || !game.result?.victory) {
+    return;
+  }
+  const nextMapId = game.getNextMapId();
+  if (!nextMapId || !game.result.nextMapUnlocked) {
+    return;
+  }
+  game.setMap(nextMapId, { carryResources: true });
+  selectedSlotId = null;
+  visualEffects.length = 0;
+  fastForwardUntilMs = 0;
+  elMapSelect.value = game.mapId;
+  buildStaticMapLayers();
+  updateMapMeta();
+}
+
+function handleAutoContinue() {
+  if (!autoContinueEnabled) {
+    return;
+  }
+  if (game.state === 'map_result') {
+    maybeAutoAdvanceMap();
+    return;
+  }
+  if (['build_phase', 'wave_result'].includes(game.state)) {
+    game.startNextWave();
+  }
 }
 
 canvas.addEventListener('click', (event) => {
@@ -871,6 +938,17 @@ btnToggleSpeed.addEventListener('click', () => {
   updateHud();
 });
 
+btnFastForwardWave.addEventListener('click', () => {
+  triggerFastForwardWave();
+  updateHud();
+});
+
+btnToggleAutoContinue.addEventListener('click', () => {
+  autoContinueEnabled = !autoContinueEnabled;
+  handleAutoContinue();
+  updateHud();
+});
+
 btnUpgrade.addEventListener('click', () => {
   if (!selectedSlotId) {
     return;
@@ -883,6 +961,7 @@ btnReset.addEventListener('click', () => {
   game.reset();
   selectedSlotId = null;
   visualEffects.length = 0;
+  fastForwardUntilMs = 0;
   updateHud();
 });
 
@@ -896,4 +975,3 @@ buildStaticMapLayers();
 updateMapMeta();
 updateHud();
 requestAnimationFrame(gameLoop);
-

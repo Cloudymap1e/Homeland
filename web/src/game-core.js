@@ -83,14 +83,17 @@ export class HomelandGame {
   }
 
   reset(options = {}) {
+    const previousCoins = this.coins ?? this.mapConfig.startingCoins;
+    const previousXp = this.xp ?? this.mapConfig.startingXp;
     const resetMapId = options.mapId || this.mapId;
     if (resetMapId !== this.mapId) {
       this.loadMap(resetMapId);
     }
 
+    const carryResources = Boolean(options.carryResources);
     this.state = 'build_phase';
-    this.coins = this.mapConfig.startingCoins;
-    this.xp = this.mapConfig.startingXp;
+    this.coins = carryResources ? Math.max(0, previousCoins) : this.mapConfig.startingCoins;
+    this.xp = carryResources ? Math.max(0, previousXp) : this.mapConfig.startingXp;
     this.waveIndex = -1;
     this.speed = 1;
     this.spawnCooldown = 0;
@@ -113,8 +116,16 @@ export class HomelandGame {
     this.speed = multiplier;
   }
 
-  setMap(mapId) {
-    this.reset({ mapId });
+  setMap(mapId, options = {}) {
+    this.reset({ mapId, ...options });
+  }
+
+  getNextMapId() {
+    const nextMapId = this.mapConfig.unlockRequirement?.nextMap;
+    if (!nextMapId || !MAPS[nextMapId]) {
+      return null;
+    }
+    return nextMapId;
   }
 
   buildTower(slotId, towerId) {
@@ -544,4 +555,3 @@ export function getPathPosition(game, distanceValue, routeIndex = 0) {
 export function getEnemyPosition(game, enemy) {
   return game.getEnemyWorldPosition(enemy);
 }
-

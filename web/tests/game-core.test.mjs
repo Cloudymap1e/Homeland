@@ -163,3 +163,16 @@ test('map switching resets state and applies selected map settings', () => {
   assert.equal(game.waveIndex, -1);
   assert.equal(game.coins, game.mapConfig.startingCoins);
 });
+
+test('map switching can carry coins and xp for auto-continue', () => {
+  const game = new HomelandGame();
+  game.coins = 5432;
+  game.xp = 987;
+
+  game.setMap('map_02_split_delta', { carryResources: true });
+
+  assert.equal(game.mapConfig.mapId, 'map_02_split_delta');
+  assert.equal(game.coins, 5432);
+  assert.equal(game.xp, 987);
+  assert.equal(game.getNextMapId(), 'map_03_marsh_maze');
+});
