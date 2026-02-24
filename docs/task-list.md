@@ -61,6 +61,25 @@ Ship one complete playable map with stable core loop and configurable balance.
 | HL-202 | Create random-strategy simulation harness for balance tuning | TODO | 1.5d | HL-201 | Batch run outputs clear-rate and leak stats |
 | HL-203 | First balance retune pass from simulation output | TODO | 1.0d | HL-202 | Difficulty targets approach design ranges |
 
+## Design + Graphics Upgrade Tasks
+
+Reference plan:
+- `/Users/rc/Project/Homeland/docs/design-graphics-plan.md`
+
+| ID | Task | Status | Estimate | Dependency | Acceptance Criteria |
+|---|---|---|---|---|---|
+| DG-001 | Build visual style board + final palette tokens | TODO | 0.5d | none | Approved palette and references in repo |
+| DG-002 | Redesign HUD layout and component states | TODO | 1.0d | DG-001 | HUD wireframe + interaction spec approved |
+| DG-003 | Implement HUD component refactor in web prototype | TODO | 1.5d | DG-002 | Existing gameplay fully usable with new HUD |
+| DG-004 | Add map layered background rendering | TODO | 1.0d | DG-001 | Terrain + river + detail layers load correctly |
+| DG-005 | Replace placeholder tower/enemy visuals with v1 sprite set | TODO | 2.0d | DG-001 | All towers/boats visually distinct in-game |
+| DG-006 | Add projectile trails + hit effects by element type | TODO | 1.5d | DG-005 | Fire/Wind/Lightning effects clearly differentiated |
+| DG-007 | Add UX state feedback (invalid build, upgrade success, leak warning) | TODO | 1.0d | DG-003 | Feedback states visible and non-blocking |
+| DG-008 | Responsive polish for <=980px layout | TODO | 1.0d | DG-003 | No overlapping controls on mobile viewport |
+| DG-101 | Add micro-animations (panel enter, button states, wave banner) | TODO | 1.0d | DG-003 | Animations improve clarity without stutter |
+| DG-102 | Add audio placeholders mapped to major events | TODO | 0.75d | DG-006 | Attack/hit/leak/wave cues audible and balanced |
+| DG-103 | Visual QA pass for color contrast and readability | TODO | 0.5d | DG-008 | Contrast issues logged/fixed for MVP screens |
+
 ## Immediate Execution Order (Next 7 Tasks)
 
 1. HL-001
@@ -70,6 +89,15 @@ Ship one complete playable map with stable core loop and configurable balance.
 5. HL-005
 6. HL-007
 7. HL-008
+
+## Immediate Design Execution Order (Next 6 Tasks)
+
+1. DG-001
+2. DG-002
+3. DG-003
+4. DG-004
+5. DG-005
+6. DG-006
 
 ## Definition of Done (Task-Level)
 

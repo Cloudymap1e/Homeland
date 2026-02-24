@@ -199,6 +199,7 @@ These numbers should be moved to config and tuned after first playable tests.
 - Design spec: `/Users/rc/Project/Homeland/docs/prototype-design.md`
 - Engineering plan: `/Users/rc/Project/Homeland/docs/action-plan.md`
 - Sprint task list: `/Users/rc/Project/Homeland/docs/task-list.md`
+- Design/graphics upgrade plan: `/Users/rc/Project/Homeland/docs/design-graphics-plan.md`
 
 ## Prototype Runtime
 
