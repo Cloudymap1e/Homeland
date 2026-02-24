@@ -5,6 +5,8 @@ const CHAIN_RADIUS = 2.6;
 const MAP_RENDER_WIDTH = 1100;
 const MAP_RENDER_HEIGHT = 680;
 const SLOT_RIVER_CLEARANCE_PX = 16;
+const GAME_PERSISTENCE_VERSION = 1;
+const VALID_GAME_STATES = new Set(['build_phase', 'wave_running', 'wave_result', 'map_result']);
 
 function distance(a, b) {
   const dx = a.x - b.x;
@@ -120,6 +122,20 @@ function pickWeightedIndex(weights) {
   return valid.length - 1;
 }
 
+function clampNumber(value, fallback, min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+function clonePlainObject(value, fallback = null) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return fallback;
+  }
+  return { ...value };
+}
+
 export class HomelandGame {
   constructor(options = {}) {
     const mapId = options.mapId || DEFAULT_MAP_ID;
@@ -188,6 +204,147 @@ export class HomelandGame {
       return null;
     }
     return nextMapId;
+  }
+
+  exportState() {
+    return {
+      version: GAME_PERSISTENCE_VERSION,
+      mapId: this.mapId,
+      state: this.state,
+      coins: this.coins,
+      xp: this.xp,
+      waveIndex: this.waveIndex,
+      speed: this.speed,
+      spawnCooldown: this.spawnCooldown,
+      spawnQueue: [...this.spawnQueue],
+      enemies: this.enemies.map((enemy) => ({ ...enemy })),
+      nextEnemyId: this.nextEnemyId,
+      towers: Array.from(this.towers.values()).map((tower) => ({ ...tower })),
+      fireZones: this.fireZones.map((zone) => ({ ...zone })),
+      result: this.result ? { ...this.result } : null,
+      stats: { ...this.stats },
+    };
+  }
+
+  importState(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const mapId = typeof payload.mapId === 'string' && payload.mapId in MAPS
+      ? payload.mapId
+      : this.mapId;
+    this.reset({ mapId });
+
+    if (typeof payload.state === 'string' && VALID_GAME_STATES.has(payload.state)) {
+      this.state = payload.state;
+    }
+
+    this.coins = clampNumber(payload.coins, this.coins);
+    this.xp = clampNumber(payload.xp, this.xp, 0);
+    this.waveIndex = clampNumber(payload.waveIndex, this.waveIndex, -1, this.waves.length - 1);
+    this.speed = clampNumber(payload.speed, this.speed, 0.25, 4);
+    this.spawnCooldown = clampNumber(payload.spawnCooldown, this.spawnCooldown, 0);
+    this.nextEnemyId = Math.max(1, Math.floor(clampNumber(payload.nextEnemyId, this.nextEnemyId, 1)));
+
+    if (Array.isArray(payload.spawnQueue)) {
+      this.spawnQueue = payload.spawnQueue.filter(
+        (enemyType) => typeof enemyType === 'string' && enemyType in ENEMIES
+      );
+    }
+
+    if (Array.isArray(payload.towers)) {
+      this.towers.clear();
+      for (const tower of payload.towers) {
+        if (!tower || typeof tower !== 'object') {
+          continue;
+        }
+        const slotId = tower.slotId;
+        const towerId = tower.towerId;
+        if (typeof slotId !== 'string' || !this.buildSlotsById.has(slotId)) {
+          continue;
+        }
+        if (typeof towerId !== 'string' || !(towerId in TOWER_CONFIG)) {
+          continue;
+        }
+        const slot = this.buildSlotsById.get(slotId);
+        const maxLevel = TOWER_CONFIG[towerId].levels.length;
+        const level = Math.floor(clampNumber(tower.level, 1, 1, maxLevel));
+        this.towers.set(slotId, {
+          id: typeof tower.id === 'string' ? tower.id : `tower_${slotId}`,
+          towerId,
+          level,
+          slotId,
+          x: slot.x,
+          y: slot.y,
+          cooldown: clampNumber(tower.cooldown, 0, 0),
+        });
+      }
+    }
+
+    if (Array.isArray(payload.enemies)) {
+      this.enemies = [];
+      for (const enemy of payload.enemies) {
+        if (!enemy || typeof enemy !== 'object') {
+          continue;
+        }
+        if (typeof enemy.enemyType !== 'string' || !(enemy.enemyType in ENEMIES)) {
+          continue;
+        }
+        const routeIndex = Math.floor(
+          clampNumber(enemy.routeIndex, 0, 0, Math.max(0, this.routeInfos.length - 1))
+        );
+        const routeInfo = this.routeInfos[routeIndex];
+        const routeLength = routeInfo ? routeInfo.pathInfo.length : 0;
+        const safeEnemy = {
+          id: typeof enemy.id === 'string' ? enemy.id : `enemy_${this.nextEnemyId}`,
+          enemyType: enemy.enemyType,
+          hp: clampNumber(enemy.hp, ENEMIES[enemy.enemyType].hp, 0),
+          maxHp: clampNumber(enemy.maxHp, ENEMIES[enemy.enemyType].hp, 1),
+          speed: clampNumber(enemy.speed, ENEMIES[enemy.enemyType].speed, 0),
+          coinReward: Math.round(clampNumber(enemy.coinReward, ENEMIES[enemy.enemyType].coinReward, 0)),
+          xpReward: Math.round(clampNumber(enemy.xpReward, ENEMIES[enemy.enemyType].xpReward, 0)),
+          distance: clampNumber(enemy.distance, 0, 0, routeLength),
+          routeIndex,
+          routeLength,
+          burnDps: clampNumber(enemy.burnDps, 0, 0),
+          burnDurationLeft: clampNumber(enemy.burnDurationLeft, 0, 0),
+          slowPercent: clampNumber(enemy.slowPercent, 0, 0, 95),
+          slowDurationLeft: clampNumber(enemy.slowDurationLeft, 0, 0),
+          shockDurationLeft: clampNumber(enemy.shockDurationLeft, 0, 0),
+        };
+        if (safeEnemy.maxHp < safeEnemy.hp) {
+          safeEnemy.maxHp = safeEnemy.hp;
+        }
+        this.enemies.push(safeEnemy);
+      }
+    }
+
+    if (Array.isArray(payload.fireZones)) {
+      this.fireZones = payload.fireZones
+        .filter((zone) => zone && typeof zone === 'object')
+        .map((zone) => ({
+          x: clampNumber(zone.x, 0),
+          y: clampNumber(zone.y, 0),
+          radius: clampNumber(zone.radius, 1, 0),
+          dps: clampNumber(zone.dps, 0, 0),
+          durationLeft: clampNumber(zone.durationLeft, 0, 0),
+        }))
+        .filter((zone) => zone.durationLeft > 0);
+    }
+
+    this.result = clonePlainObject(payload.result, null);
+
+    const stats = clonePlainObject(payload.stats, {});
+    this.stats = {
+      spawned: Math.max(0, Math.floor(clampNumber(stats.spawned, this.stats.spawned, 0))),
+      killed: Math.max(0, Math.floor(clampNumber(stats.killed, this.stats.killed, 0))),
+      leaked: Math.max(0, Math.floor(clampNumber(stats.leaked, this.stats.leaked, 0))),
+    };
+
+    this.lastAttacks = [];
+    this.events = [];
+    return true;
   }
 
   buildTower(slotId, towerId) {

@@ -229,3 +229,43 @@ test('map switching can carry coins and xp for auto-continue', () => {
   assert.equal(game.xp, 987);
   assert.equal(game.getNextMapId(), 'map_03_marsh_maze');
 });
+
+test('state can export and import with active wave progress', () => {
+  const source = new HomelandGame({ mapId: 'map_02_split_delta' });
+  const slotId = source.getBuildSlots()[0].id;
+  source.buildTower(slotId, 'arrow');
+  source.startNextWave();
+  advance(source, 2.2, 0.05);
+
+  const payload = source.exportState();
+  const restored = new HomelandGame({ mapId: 'map_01_river_bend' });
+  const ok = restored.importState(payload);
+
+  assert.equal(ok, true);
+  assert.equal(restored.mapId, source.mapId);
+  assert.equal(restored.state, source.state);
+  assert.equal(restored.coins, source.coins);
+  assert.equal(restored.xp, source.xp);
+  assert.equal(restored.waveIndex, source.waveIndex);
+  assert.equal(restored.spawnQueue.length, source.spawnQueue.length);
+  assert.equal(restored.enemies.length, source.enemies.length);
+  assert.equal(restored.getTower(slotId)?.towerId, 'arrow');
+});
+
+test('importState safely ignores malformed entities', () => {
+  const game = new HomelandGame();
+  const ok = game.importState({
+    mapId: game.mapId,
+    towers: [
+      { slotId: 'unknown_slot', towerId: 'arrow', level: 2 },
+      { slotId: game.getBuildSlots()[0].id, towerId: 'bad_tower' },
+    ],
+    enemies: [
+      { id: 'e1', enemyType: 'not_real' },
+    ],
+  });
+
+  assert.equal(ok, true);
+  assert.equal(game.towers.size, 0);
+  assert.equal(game.enemies.length, 0);
+});
