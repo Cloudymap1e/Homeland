@@ -61,12 +61,17 @@ h2 {
   gap: 8px;
 }
 
-button {
+button,
+select {
   border: 1px solid #29415f;
   background: linear-gradient(180deg, #1e3652 0%, #15283f 100%);
   color: #dceaff;
   padding: 9px 12px;
   border-radius: 10px;
+  font: inherit;
+}
+
+button {
   cursor: pointer;
   text-align: left;
 }
