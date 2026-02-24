@@ -7,114 +7,72 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="layout">
-      <aside class="panel">
-        <header class="panel-header">
+    <main class="stage-shell">
+      <canvas id="game"></canvas>
+
+      <section class="top-controls">
+        <header class="brand-block">
           <h1>Homeland</h1>
-          <p class="subtitle">River Defense Command Deck</p>
+          <p>River Defense Command Deck</p>
         </header>
+        <div class="control-row">
+          <label for="map-select">Map</label>
+          <select id="map-select"></select>
+          <button id="load-map">Load Map</button>
+          <button id="start-wave">Start Wave</button>
+          <button id="toggle-speed">Speed 1x</button>
+          <button id="fast-forward-wave">Fast 1s Fleet Run</button>
+          <button id="toggle-auto-continue">Auto Continue: Off</button>
+          <button id="reset">Reset Run</button>
+        </div>
+        <div id="map-meta" class="map-meta"></div>
+      </section>
 
-        <section class="resource-section">
-          <h2>Resources</h2>
-          <div class="resource-grid">
-            <div class="resource-card resource-coin">
-              <span>Coins Left</span>
-              <strong id="coins">0</strong>
-            </div>
-            <div class="resource-card">
-              <span>XP</span>
-              <strong id="xp">0</strong>
-            </div>
-            <div class="resource-card resource-map">
-              <span>Map</span>
-              <strong id="map-name">-</strong>
-            </div>
-            <div class="resource-card">
-              <span>Wave</span>
-              <strong id="wave">0/0</strong>
-            </div>
-            <div class="resource-card">
-              <span>Boats Left</span>
-              <strong id="boats-left">0</strong>
-            </div>
-            <div class="resource-card">
-              <span>State</span>
-              <strong id="state">Build</strong>
-            </div>
-          </div>
-        </section>
+      <div class="overlay-hud">
+        <div class="overlay-chip coins-chip">
+          <span>Coins Left</span>
+          <strong id="coins-overlay">0</strong>
+        </div>
+        <div class="overlay-chip">
+          <span>XP</span>
+          <strong id="xp-overlay">0</strong>
+        </div>
+        <div class="overlay-chip">
+          <span>Map</span>
+          <strong id="map-overlay">-</strong>
+        </div>
+        <div class="overlay-chip">
+          <span>Wave</span>
+          <strong id="wave-overlay">0/0</strong>
+        </div>
+        <div class="overlay-chip">
+          <span>Boats</span>
+          <strong id="boats-overlay">0</strong>
+        </div>
+        <div class="overlay-chip">
+          <span>State</span>
+          <strong id="state-overlay">Build</strong>
+        </div>
+      </div>
 
-        <section>
-          <h2>Map Control</h2>
-          <div class="actions">
-            <select id="map-select"></select>
-            <button id="load-map">Load Selected Map</button>
-          </div>
-          <div id="map-meta" class="selection"></div>
-        </section>
-
-        <section>
-          <h2>Build</h2>
-          <div id="tower-buttons" class="tower-buttons"></div>
-        </section>
-
-        <section>
-          <h2>Actions</h2>
-          <div class="actions">
-            <button id="start-wave">Start Wave</button>
-            <button id="toggle-speed">Speed 1x</button>
-            <button id="fast-forward-wave">Fast 1s Fleet Run</button>
-            <button id="toggle-auto-continue">Auto Continue: Off</button>
-            <button id="reset">Reset Run</button>
-          </div>
-        </section>
-
-        <section>
-          <h2>Selection</h2>
-          <div id="selection" class="selection">No slot selected.</div>
-          <button id="upgrade" disabled>Upgrade Tower</button>
-        </section>
-
-        <section>
-          <h2>Tower Curves</h2>
-          <div class="actions">
+      <section class="bottom-dock">
+        <div class="dock-panel result-panel">
+          <h2>Battle Report</h2>
+          <div id="result" class="result">In progress.</div>
+        </div>
+        <div class="dock-panel curve-panel">
+          <div class="curve-header">
+            <h2>Tower Curves</h2>
             <select id="curve-tower"></select>
           </div>
           <canvas id="curve-chart" width="280" height="220"></canvas>
-          <div id="curve-summary" class="selection curve-summary"></div>
-        </section>
-
-        <section>
-          <h2>Result</h2>
-          <div id="result" class="result">In progress.</div>
-        </section>
-      </aside>
-
-      <main class="game-area">
-        <div class="stage-shell">
-          <canvas id="game" width="1100" height="680"></canvas>
-          <div class="overlay-hud">
-            <div class="overlay-chip">
-              <span>Coins Left</span>
-              <strong id="coins-overlay">0</strong>
-            </div>
-            <div class="overlay-chip">
-              <span>Wave</span>
-              <strong id="wave-overlay">0/0</strong>
-            </div>
-            <div class="overlay-chip">
-              <span>Boats</span>
-              <strong id="boats-overlay">0</strong>
-            </div>
-            <div class="overlay-chip">
-              <span>State</span>
-              <strong id="state-overlay">Build</strong>
-            </div>
-          </div>
+          <div id="curve-summary" class="curve-summary"></div>
         </div>
-      </main>
-    </div>
+      </section>
 
-    <script type="module" src="/src/app.js?v=campaign-pass-1"></script>
+      <section id="slot-popout" class="slot-popout hidden" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="/src/app.js?v=campaign-pass-2"></script>
   </body>
 </html>

@@ -4,18 +4,12 @@ import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, CAMPAIGN_INFO } from './config.js';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-const elMapName = document.getElementById('map-name');
-const elCoins = document.getElementById('coins');
-const elXp = document.getElementById('xp');
-const elWave = document.getElementById('wave');
-const elBoatsLeft = document.getElementById('boats-left');
-const elState = document.getElementById('state');
 const elResult = document.getElementById('result');
-const elSelection = document.getElementById('selection');
-const elTowerButtons = document.getElementById('tower-buttons');
 const elMapSelect = document.getElementById('map-select');
 const elMapMeta = document.getElementById('map-meta');
 const elCoinsOverlay = document.getElementById('coins-overlay');
+const elXpOverlay = document.getElementById('xp-overlay');
+const elMapOverlay = document.getElementById('map-overlay');
 const elWaveOverlay = document.getElementById('wave-overlay');
 const elBoatsOverlay = document.getElementById('boats-overlay');
 const elStateOverlay = document.getElementById('state-overlay');
@@ -23,13 +17,13 @@ const elCurveTower = document.getElementById('curve-tower');
 const curveCanvas = document.getElementById('curve-chart');
 const curveCtx = curveCanvas.getContext('2d');
 const elCurveSummary = document.getElementById('curve-summary');
+const elSlotPopout = document.getElementById('slot-popout');
 
 const btnStartWave = document.getElementById('start-wave');
 const btnToggleSpeed = document.getElementById('toggle-speed');
 const btnFastForwardWave = document.getElementById('fast-forward-wave');
 const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
 const btnReset = document.getElementById('reset');
-const btnUpgrade = document.getElementById('upgrade');
 const btnLoadMap = document.getElementById('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
@@ -41,6 +35,7 @@ let simTime = 0;
 let autoContinueEnabled = false;
 let fastForwardUntilMs = 0;
 let curveDirty = true;
+let slotPopoutNotice = '';
 
 const SLOT_RADIUS = 16;
 const WORLD_SCALE = 10;
@@ -291,25 +286,20 @@ function buildStaticMapLayers() {
   drawRiverLayer(river);
 }
 
-function rebuildTowerButtons() {
-  elTowerButtons.innerHTML = '';
-  for (const tower of Object.values(TOWER_CONFIG)) {
-    const btn = document.createElement('button');
-    btn.dataset.towerId = tower.id;
-    btn.textContent = `${tower.name} (${tower.levels[0].cost})`;
-    if (tower.id === selectedTowerId) {
-      btn.classList.add('active');
-    }
-    btn.addEventListener('click', () => {
-      selectedTowerId = tower.id;
-      selectedCurveTowerId = tower.id;
-      elCurveTower.value = selectedCurveTowerId;
-      markCurveDirty();
-      rebuildTowerButtons();
-      updateSelectionText();
-    });
-    elTowerButtons.appendChild(btn);
+function resizeCanvasToViewport() {
+  const nextWidth = Math.max(320, Math.floor(window.innerWidth));
+  const nextHeight = Math.max(320, Math.floor(window.innerHeight));
+  if (canvas.width === nextWidth && canvas.height === nextHeight) {
+    return;
   }
+  canvas.width = nextWidth;
+  canvas.height = nextHeight;
+  terrainLayer.width = nextWidth;
+  terrainLayer.height = nextHeight;
+  riverLayer.width = nextWidth;
+  riverLayer.height = nextHeight;
+  buildStaticMapLayers();
+  refreshSlotPopout();
 }
 
 function rebuildMapSelect() {
@@ -502,57 +492,210 @@ function rebuildCurveTowerSelect() {
   markCurveDirty();
 }
 
-function updateSelectionText() {
-  const slot = selectedSlotId
-    ? game.getBuildSlots().find((candidate) => candidate.id === selectedSlotId)
-    : null;
-  if (!slot) {
-    elSelection.textContent = `Build mode: ${TOWER_CONFIG[selectedTowerId].name}. Click a slot to place.`;
-    btnUpgrade.disabled = true;
-    return;
-  }
+function canModifyTowers() {
+  return ['build_phase', 'wave_result'].includes(game.state);
+}
 
-  const tower = game.getTower(slot.id);
-  if (!tower) {
-    elSelection.textContent = `Slot ${slot.id} selected. Click again to build ${TOWER_CONFIG[selectedTowerId].name}.`;
-    btnUpgrade.disabled = true;
-    return;
-  }
+function closeSlotPopout() {
+  elSlotPopout.classList.add('hidden');
+  elSlotPopout.innerHTML = '';
+}
 
-  const cfg = TOWER_CONFIG[tower.towerId];
-  const levelCfg = cfg.levels[tower.level - 1];
-  let text = `${cfg.name} at ${slot.id}\nLevel ${tower.level}/${cfg.levels.length} | DMG ${levelCfg.damage} | RNG ${levelCfg.range}`;
+function slotSpecialLines(cfg, levelCfg) {
   if (cfg.effectType === 'wind') {
-    text += `\nSlow: ${levelCfg.slowPercent}% for ${levelCfg.slowDuration}s`;
-    text += `\nTargets: ${levelCfg.windTargets}`;
+    return [
+      `Slow: ${levelCfg.slowPercent}% for ${levelCfg.slowDuration}s`,
+      `Targets: ${levelCfg.windTargets}`,
+    ];
   }
   if (cfg.effectType === 'fire') {
-    text += `\nFireball: ${levelCfg.fireballDps}/s for ${levelCfg.fireballDuration}s`;
+    return [
+      `Fireball DPS: ${levelCfg.fireballDps}`,
+      `Fire zone: ${levelCfg.fireballDuration}s`,
+    ];
   }
   if (cfg.effectType === 'bomb') {
-    text += `\nSplash radius: ${levelCfg.splashRadius}`;
+    return [`Splash radius: ${levelCfg.splashRadius}`];
   }
-  if (tower.level < cfg.levels.length) {
-    const nextCost = cfg.levels[tower.level].cost;
-    text += `\nUpgrade cost: ${nextCost}`;
-    btnUpgrade.disabled = game.coins < nextCost || !['build_phase', 'wave_result'].includes(game.state);
+  if (cfg.effectType === 'lightning') {
+    return [
+      `Chain count: ${levelCfg.chainCount}`,
+      `Chain falloff: ${levelCfg.chainFalloff}%`,
+    ];
+  }
+  return [];
+}
+
+function positionSlotPopout(slot) {
+  const p = normToPx(slot);
+  const margin = 10;
+  const width = elSlotPopout.offsetWidth || 300;
+  const height = elSlotPopout.offsetHeight || 220;
+
+  let left = p.x + 26;
+  if (left + width > canvas.width - margin) {
+    left = p.x - width - 26;
+  }
+  left = Math.max(margin, Math.min(canvas.width - width - margin, left));
+
+  let top = p.y - height * 0.48;
+  if (top + height > canvas.height - margin) {
+    top = canvas.height - height - margin;
+  }
+  top = Math.max(margin, top);
+
+  elSlotPopout.style.left = `${Math.round(left)}px`;
+  elSlotPopout.style.top = `${Math.round(top)}px`;
+}
+
+function createPopoutAction(label, detail, onClick, disabled = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'slot-option';
+  button.disabled = disabled;
+  button.textContent = label;
+  if (detail) {
+    const extra = document.createElement('small');
+    extra.textContent = detail;
+    button.appendChild(extra);
+  }
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+function renderSlotPopout(slotId = selectedSlotId) {
+  const slot = slotId ? game.getBuildSlots().find((candidate) => candidate.id === slotId) : null;
+  if (!slot) {
+    closeSlotPopout();
+    return;
+  }
+
+  selectedSlotId = slot.id;
+  const tower = game.getTower(slot.id);
+  const buildPhase = canModifyTowers();
+
+  elSlotPopout.innerHTML = '';
+  elSlotPopout.classList.remove('hidden');
+
+  const title = document.createElement('h3');
+  title.textContent = tower ? `Tower Slot ${slot.id}` : `Build Slot ${slot.id}`;
+  elSlotPopout.appendChild(title);
+
+  const helper = document.createElement('p');
+  helper.textContent = tower
+    ? 'Upgrade or inspect this tower.'
+    : buildPhase
+      ? 'Pick a tower to build on this slot.'
+      : 'Building is locked while the wave is active.';
+  elSlotPopout.appendChild(helper);
+
+  const meta = document.createElement('div');
+  meta.className = 'slot-meta';
+  if (tower) {
+    const cfg = TOWER_CONFIG[tower.towerId];
+    const levelCfg = cfg.levels[tower.level - 1];
+    const lines = [
+      `${cfg.name}`,
+      `Level ${tower.level}/${cfg.levels.length} | DMG ${levelCfg.damage} | RNG ${levelCfg.range}`,
+      ...slotSpecialLines(cfg, levelCfg),
+    ];
+    meta.textContent = lines.join('\n');
   } else {
-    text += '\nMax level reached';
-    btnUpgrade.disabled = true;
+    meta.textContent = `Open ground ready for placement.\nCoins available: ${formatNumber(game.coins)}`;
   }
-  elSelection.textContent = text;
+  elSlotPopout.appendChild(meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'slot-options';
+  elSlotPopout.appendChild(actions);
+
+  if (!tower) {
+    for (const cfg of Object.values(TOWER_CONFIG)) {
+      const cost = cfg.levels[0].cost;
+      const disabled = !buildPhase || game.coins < cost;
+      actions.appendChild(
+        createPopoutAction(
+          `${cfg.name} - ${formatNumber(cost)}c`,
+          `L1 DMG ${cfg.levels[0].damage} | RNG ${cfg.levels[0].range}`,
+          () => {
+            const result = game.buildTower(slot.id, cfg.id);
+            slotPopoutNotice = result.ok ? '' : result.error;
+            if (result.ok) {
+              selectedTowerId = cfg.id;
+              selectedCurveTowerId = cfg.id;
+              elCurveTower.value = selectedCurveTowerId;
+              markCurveDirty();
+            }
+            updateHud();
+          },
+          disabled
+        )
+      );
+    }
+  } else {
+    const cfg = TOWER_CONFIG[tower.towerId];
+    const canUpgrade = tower.level < cfg.levels.length;
+    const nextCost = canUpgrade ? cfg.levels[tower.level].cost : 0;
+    const disabled = !canUpgrade || !buildPhase || game.coins < nextCost;
+
+    selectedTowerId = tower.towerId;
+    selectedCurveTowerId = tower.towerId;
+    elCurveTower.value = selectedCurveTowerId;
+
+    actions.appendChild(
+      createPopoutAction(
+        canUpgrade ? `Upgrade to L${tower.level + 1} - ${formatNumber(nextCost)}c` : 'Max level reached',
+        canUpgrade ? 'Upgrade only during build/wave clear phases.' : 'This tower is already at level cap.',
+        () => {
+          const result = game.upgradeTower(slot.id);
+          slotPopoutNotice = result.ok ? '' : result.error;
+          updateHud();
+        },
+        disabled
+      )
+    );
+  }
+
+  if (slotPopoutNotice) {
+    const notice = document.createElement('p');
+    notice.textContent = slotPopoutNotice;
+    elSlotPopout.appendChild(notice);
+  }
+
+  const footer = document.createElement('div');
+  footer.className = 'slot-actions';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'slot-close';
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    selectedSlotId = null;
+    slotPopoutNotice = '';
+    closeSlotPopout();
+  });
+  footer.appendChild(closeBtn);
+  elSlotPopout.appendChild(footer);
+
+  markCurveDirty();
+  positionSlotPopout(slot);
+}
+
+function refreshSlotPopout() {
+  if (elSlotPopout.classList.contains('hidden')) {
+    return;
+  }
+  renderSlotPopout(selectedSlotId);
 }
 
 function updateHud() {
   const snap = game.getSnapshot();
-  elMapName.textContent = snap.mapName;
-  elCoins.textContent = formatNumber(snap.coins);
-  elXp.textContent = formatNumber(snap.xp);
-  elWave.textContent = `${Math.max(snap.wave, 0)}/${snap.totalWaves}`;
-  elBoatsLeft.textContent = formatNumber(snap.boatsLeft);
-  elState.textContent = stateLabel(snap.state);
-
   elCoinsOverlay.textContent = formatNumber(snap.coins);
+  elXpOverlay.textContent = formatNumber(snap.xp);
+  elMapOverlay.textContent = snap.mapName;
   elWaveOverlay.textContent = `${Math.max(snap.wave, 0)}/${snap.totalWaves}`;
   elBoatsOverlay.textContent = formatNumber(snap.boatsLeft);
   elStateOverlay.textContent = stateLabel(snap.state);
@@ -571,7 +714,7 @@ function updateHud() {
   btnToggleSpeed.textContent = `Speed ${game.speed}x`;
   btnFastForwardWave.textContent = fastForwardUntilMs > 0 ? 'Fast 1s Fleet Run (Active)' : 'Fast 1s Fleet Run';
   btnToggleAutoContinue.textContent = `Auto Continue: ${autoContinueEnabled ? 'On' : 'Off'}`;
-  updateSelectionText();
+  refreshSlotPopout();
   updateCurveVisualization();
 }
 
@@ -1065,6 +1208,8 @@ function loadSelectedMap() {
   game.setMap(elMapSelect.value);
   selectedSlotId = null;
   fastForwardUntilMs = 0;
+  slotPopoutNotice = '';
+  closeSlotPopout();
   buildStaticMapLayers();
   updateMapMeta();
   updateHud();
@@ -1091,6 +1236,8 @@ function maybeAutoAdvanceMap() {
   }
   game.setMap(nextMapId, { carryResources: true });
   selectedSlotId = null;
+  slotPopoutNotice = '';
+  closeSlotPopout();
   visualEffects.length = 0;
   fastForwardUntilMs = 0;
   elMapSelect.value = game.mapId;
@@ -1115,18 +1262,27 @@ canvas.addEventListener('click', (event) => {
   const slot = pickSlotFromMouse(event.clientX, event.clientY);
   if (!slot) {
     selectedSlotId = null;
-    updateSelectionText();
+    slotPopoutNotice = '';
+    closeSlotPopout();
     return;
   }
 
   selectedSlotId = slot.id;
-  const tower = game.getTower(slot.id);
+  slotPopoutNotice = '';
+  renderSlotPopout(slot.id);
+  updateHud();
+});
 
-  if (!tower && ['build_phase', 'wave_result'].includes(game.state)) {
-    game.buildTower(slot.id, selectedTowerId);
+document.addEventListener('pointerdown', (event) => {
+  if (elSlotPopout.classList.contains('hidden')) {
+    return;
   }
-
-  updateSelectionText();
+  if (event.target === canvas || elSlotPopout.contains(event.target)) {
+    return;
+  }
+  selectedSlotId = null;
+  slotPopoutNotice = '';
+  closeSlotPopout();
 });
 
 btnStartWave.addEventListener('click', () => {
@@ -1150,19 +1306,14 @@ btnToggleAutoContinue.addEventListener('click', () => {
   updateHud();
 });
 
-btnUpgrade.addEventListener('click', () => {
-  if (!selectedSlotId) {
-    return;
-  }
-  game.upgradeTower(selectedSlotId);
-  updateHud();
-});
-
 btnReset.addEventListener('click', () => {
   game.reset();
   selectedSlotId = null;
+  slotPopoutNotice = '';
+  closeSlotPopout();
   visualEffects.length = 0;
   fastForwardUntilMs = 0;
+  buildStaticMapLayers();
   updateHud();
 });
 
@@ -1175,10 +1326,13 @@ elCurveTower.addEventListener('change', () => {
   updateCurveVisualization(true);
 });
 
+window.addEventListener('resize', () => {
+  resizeCanvasToViewport();
+});
+
 rebuildMapSelect();
-rebuildTowerButtons();
 rebuildCurveTowerSelect();
-buildStaticMapLayers();
+resizeCanvasToViewport();
 updateMapMeta();
 updateHud();
 requestAnimationFrame(gameLoop);
