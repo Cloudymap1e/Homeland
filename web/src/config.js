@@ -80,6 +80,8 @@ function createFireLevels() {
       fireballDps: intFromAnchors(level, [40, 56, 84, 118, 162, 214]),
       fireballDuration: 3.0,
       fireballRadius: floatFromAnchors(level, [0.7, 0.78, 0.86, 0.94, 1.03, 1.12]),
+      burnDps: intFromAnchors(level, [18, 27, 40, 56, 77, 102]),
+      burnDuration: floatFromAnchors(level, [2.5, 2.7, 2.95, 3.2, 3.45, 3.75]),
     });
   }
   return levels;
@@ -136,6 +138,7 @@ function createLightningLevels() {
       attackSpeed: floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5]),
       chainCount: lightningChainsByLevel(level),
       chainFalloff: intFromAnchors(level, [38, 35, 32, 28, 24, 20]),
+      shockVisualDuration: floatFromAnchors(level, [0.58, 0.66, 0.74, 0.82, 0.9, 1.0]),
     });
   }
   return levels;

@@ -1071,6 +1071,176 @@ function drawBoat(enemy, p, angle) {
   ctx.restore();
 }
 
+function enemyPhase(enemy) {
+  const key = `${enemy.id}:${enemy.enemyType}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 33 + key.charCodeAt(i)) % 100000;
+  }
+  return hash / 100000;
+}
+
+function drawWindTornadoOverlay(enemy, p, angle, phase) {
+  const slowDuration = enemy.slowDurationLeft || 0;
+  const slowPercent = enemy.slowPercent || 0;
+  if (slowDuration <= 0 || slowPercent <= 0) {
+    return;
+  }
+
+  const slowStrength = Math.min(1, slowPercent / 86);
+  const durationStrength = Math.min(1, slowDuration / 2.6);
+  const intensity = (0.72 + slowStrength * 0.28) * (0.78 + durationStrength * 0.22);
+
+  ctx.save();
+  ctx.translate(p.x, p.y + 3);
+  ctx.rotate(angle * 0.14 + simTime * (2.2 + slowStrength * 1.5) + phase);
+
+  const cone = ctx.createLinearGradient(0, -28, 0, 12);
+  cone.addColorStop(0, `rgba(194,249,255,${0.18 * intensity})`);
+  cone.addColorStop(0.45, `rgba(157,231,250,${0.13 * intensity})`);
+  cone.addColorStop(1, 'rgba(130,206,238,0)');
+  ctx.fillStyle = cone;
+  ctx.beginPath();
+  ctx.moveTo(-10, 10);
+  ctx.quadraticCurveTo(0, -26, 10, 10);
+  ctx.closePath();
+  ctx.fill();
+
+  for (let i = 0; i < 5; i += 1) {
+    const t = i / 4;
+    const y = 8 - t * 26;
+    const radiusX = 8 + t * 11 + Math.sin(simTime * 8 + phase * 11 + i * 1.7) * 1.4;
+    const radiusY = 2.8 + t * 1.8;
+    ctx.strokeStyle = `rgba(166,244,255,${(0.32 + t * 0.4) * intensity})`;
+    ctx.lineWidth = 1.2 + t * 0.75;
+    ctx.beginPath();
+    ctx.ellipse(0, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawBurnOverlay(enemy, p, angle, phase) {
+  const burnDuration = enemy.burnDurationLeft || 0;
+  const burnDps = enemy.burnDps || 0;
+  if (burnDuration <= 0 || burnDps <= 0) {
+    return;
+  }
+
+  const heatStrength = Math.min(1, burnDps / 120);
+  const durationStrength = Math.min(1, burnDuration / 3.2);
+  const intensity = (0.62 + heatStrength * 0.38) * (0.76 + durationStrength * 0.24);
+
+  ctx.save();
+  ctx.translate(p.x, p.y - 2);
+  ctx.rotate(angle);
+
+  const glow = ctx.createRadialGradient(-3, 0, 2, -3, 0, 20);
+  glow.addColorStop(0, `rgba(255,203,92,${0.4 * intensity})`);
+  glow.addColorStop(0.55, `rgba(255,124,58,${0.24 * intensity})`);
+  glow.addColorStop(1, 'rgba(255,95,40,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(-3, 0, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (let i = 0; i < 4; i += 1) {
+    const x = -11 + i * 6.5;
+    const flicker = Math.sin(simTime * (9.5 + i) + phase * 17 + i * 0.9);
+    const tipY = -11 - intensity * 8 - flicker * 2.6;
+    const flameGradient = ctx.createLinearGradient(x, 4, x, tipY);
+    flameGradient.addColorStop(0, `rgba(255,126,52,${0.58 * intensity})`);
+    flameGradient.addColorStop(0.5, `rgba(255,184,72,${0.82 * intensity})`);
+    flameGradient.addColorStop(1, 'rgba(255,250,176,0)');
+    ctx.fillStyle = flameGradient;
+    ctx.beginPath();
+    ctx.moveTo(x - 2.4, 4);
+    ctx.quadraticCurveTo(x - 1.2, tipY * 0.45, x, tipY);
+    ctx.quadraticCurveTo(x + 1.5, tipY * 0.35, x + 2.4, 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    const lift = (simTime * 32 + phase * 53 + i * 13) % 22;
+    const px = -8 + i * 7 + Math.sin(simTime * 5 + i + phase * 6) * 1.4;
+    const py = 4 - lift;
+    ctx.fillStyle = `rgba(255,208,120,${0.3 * intensity})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawLightningStroke(points, alpha, lineWidth = 2.4) {
+  if (points.length < 2 || alpha <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,228,121,${alpha})`;
+  ctx.shadowColor = `rgba(255,228,121,${Math.min(0.7, alpha)})`;
+  ctx.shadowBlur = 9;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawShockOverlay(enemy, p, phase) {
+  const shockDuration = enemy.shockDurationLeft || 0;
+  if (shockDuration <= 0) {
+    return;
+  }
+
+  const intensity = Math.min(1, shockDuration / 0.95);
+  ctx.save();
+  ctx.translate(p.x, p.y - 1);
+
+  const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 22);
+  glow.addColorStop(0, `rgba(255,251,186,${0.34 + intensity * 0.24})`);
+  glow.addColorStop(0.6, `rgba(255,230,118,${0.2 + intensity * 0.18})`);
+  glow.addColorStop(1, 'rgba(255,218,92,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  const arcCount = intensity > 0.72 ? 3 : 2;
+  for (let i = 0; i < arcCount; i += 1) {
+    const start = simTime * (13 + i * 1.7) + phase * 13 + i * 1.9;
+    const points = [];
+    const steps = 4;
+    for (let j = 0; j <= steps; j += 1) {
+      const t = j / steps;
+      const a = start + t * (0.78 + i * 0.16);
+      const radius = 9 + t * 8.5;
+      const jitterX = Math.sin(simTime * 31 + phase * 29 + j * 1.8 + i) * (1.1 + intensity * 1.2);
+      const jitterY = Math.cos(simTime * 27 + phase * 17 + j * 1.6 + i * 1.4) * (1.0 + intensity);
+      points.push({
+        x: Math.cos(a) * radius + jitterX,
+        y: Math.sin(a) * radius + jitterY,
+      });
+    }
+    drawLightningStroke(points, 0.46 + intensity * 0.38, 1.7 + intensity * 0.9);
+  }
+
+  ctx.restore();
+}
+
+function drawEnemyStatusEffects(enemy, p, angle) {
+  const phase = enemyPhase(enemy);
+  drawWindTornadoOverlay(enemy, p, angle, phase);
+  drawBurnOverlay(enemy, p, angle, phase);
+  drawShockOverlay(enemy, p, phase);
+}
+
 function drawEnemies() {
   for (const enemy of game.enemies) {
     const p = normToPx(getEnemyPosition(game, enemy));
@@ -1082,6 +1252,7 @@ function drawEnemies() {
     const angle = Math.atan2(p.y - backP.y, p.x - backP.x);
 
     drawBoat(enemy, p, angle);
+    drawEnemyStatusEffects(enemy, p, angle);
 
     const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
     ctx.fillStyle = 'rgba(7, 16, 22, 0.78)';
@@ -1127,12 +1298,12 @@ function ingestAttackVisuals() {
       pushVisualEffect({ kind: 'wind', from, to, ttl: 0.34, life: 0.34 });
       continue;
     }
-    if (attack.effectType === 'lightning') {
+    if (attack.effectType === 'lightning' || attack.effectType === 'lightning_chain') {
       pushVisualEffect({
-        kind: 'lightning',
+        kind: attack.effectType === 'lightning_chain' ? 'lightning_chain' : 'lightning',
         points: createLightningPoints(from, to),
-        ttl: 0.12,
-        life: 0.12,
+        ttl: attack.effectType === 'lightning_chain' ? 0.1 : 0.14,
+        life: attack.effectType === 'lightning_chain' ? 0.1 : 0.14,
       });
       continue;
     }
@@ -1144,8 +1315,10 @@ function updateVisualEffects(dt) {
   for (const effect of visualEffects) {
     effect.ttl -= dt;
   }
-  while (visualEffects.length && visualEffects[0].ttl <= 0) {
-    visualEffects.shift();
+  for (let i = visualEffects.length - 1; i >= 0; i -= 1) {
+    if (visualEffects[i].ttl <= 0) {
+      visualEffects.splice(i, 1);
+    }
   }
 }
 
@@ -1227,19 +1400,10 @@ function drawVisualEffects() {
       continue;
     }
 
-    if (effect.kind === 'lightning') {
-      ctx.save();
-      ctx.strokeStyle = `rgba(255,228,121,${alpha})`;
-      ctx.shadowColor = 'rgba(255,228,121,0.65)';
-      ctx.shadowBlur = 9;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(effect.points[0].x, effect.points[0].y);
-      for (let i = 1; i < effect.points.length; i += 1) {
-        ctx.lineTo(effect.points[i].x, effect.points[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
+    if (effect.kind === 'lightning' || effect.kind === 'lightning_chain') {
+      const lineWidth = effect.kind === 'lightning_chain' ? 1.9 : 2.4;
+      const chainAlpha = effect.kind === 'lightning_chain' ? alpha * 0.84 : alpha;
+      drawLightningStroke(effect.points, chainAlpha, lineWidth);
     }
   }
 }

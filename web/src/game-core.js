@@ -326,6 +326,7 @@ export class HomelandGame {
       burnDurationLeft: 0,
       slowPercent: 0,
       slowDurationLeft: 0,
+      shockDurationLeft: 0,
     });
     this.nextEnemyId += 1;
     this.stats.spawned += 1;
@@ -366,6 +367,9 @@ export class HomelandGame {
         if (enemy.slowDurationLeft === 0) {
           enemy.slowPercent = 0;
         }
+      }
+      if (enemy.shockDurationLeft > 0) {
+        enemy.shockDurationLeft = Math.max(0, enemy.shockDurationLeft - dt);
       }
     }
 
@@ -419,11 +423,14 @@ export class HomelandGame {
       });
 
       if (cfg.effectType === 'lightning') {
+        const shockDuration = levelCfg.shockVisualDuration || 0.58;
+        target.shockDurationLeft = Math.max(target.shockDurationLeft || 0, shockDuration);
         this.applyLightningChain(
           target,
           levelCfg.damage,
           levelCfg.chainFalloff || 0,
-          levelCfg.chainCount || 0
+          levelCfg.chainCount || 0,
+          shockDuration
         );
       }
     }
@@ -431,6 +438,11 @@ export class HomelandGame {
 
   applyFireball(tower, target, levelCfg) {
     target.hp -= levelCfg.damage;
+    const burnDps = levelCfg.burnDps || 0;
+    if (burnDps > 0) {
+      target.burnDps = Math.max(target.burnDps || 0, burnDps);
+      target.burnDurationLeft = Math.max(target.burnDurationLeft || 0, levelCfg.burnDuration || 0);
+    }
     const targetPos = this.getEnemyWorldPosition(target);
     this.lastAttacks.push({
       from: { x: tower.x, y: tower.y },
@@ -510,7 +522,7 @@ export class HomelandGame {
     return inRange.slice(0, Math.max(1, maxTargets));
   }
 
-  applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount) {
+  applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount, shockDuration = 0) {
     if (chainCount <= 0) {
       return;
     }
@@ -534,6 +546,14 @@ export class HomelandGame {
       }
       const chainDamage = baseDamage * (1 - falloffPercent / 100);
       candidate.enemy.hp -= chainDamage;
+      if (shockDuration > 0) {
+        candidate.enemy.shockDurationLeft = Math.max(candidate.enemy.shockDurationLeft || 0, shockDuration);
+      }
+      this.lastAttacks.push({
+        from: sourcePos,
+        to: this.getEnemyWorldPosition(candidate.enemy),
+        effectType: 'lightning_chain',
+      });
       hits += 1;
     }
   }

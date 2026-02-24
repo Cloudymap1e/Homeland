@@ -32,9 +32,9 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 3. Magic Tower
 - Role: elemental effects and burst utility
 - Initial elements:
-  - Fire (fireball impact + persistent 3-second burn zone)
+  - Fire (fireball impact + persistent 3-second burn zone + ignite burn DoT on hit boats)
   - Wind (multi-target slow control)
-  - Lightning (burst or chain)
+  - Lightning (burst or chain, with short shock-state visuals on affected boats)
 
 ### Enemy Fleets (Pirate Boats)
 
