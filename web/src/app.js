@@ -38,6 +38,7 @@ const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
 let selectedTowerId = 'arrow';
 let selectedCurveTowerId = 'arrow';
 let selectedSlotId = null;
+let rangePreviewTowerId = null;
 let lastTime = performance.now();
 let simTime = 0;
 let autoContinueEnabled = false;
@@ -65,6 +66,13 @@ const STATE_LABELS = {
   wave_running: 'Wave Live',
   wave_result: 'Wave Clear',
   map_result: 'Map Result',
+};
+const TOWER_RANGE_COLORS = {
+  arrow: { fill: [245, 214, 131], edge: [252, 235, 171] },
+  bone: { fill: [243, 171, 97], edge: [253, 205, 152] },
+  magic_fire: { fill: [255, 124, 88], edge: [255, 188, 156] },
+  magic_wind: { fill: [137, 235, 255], edge: [199, 244, 255] },
+  magic_lightning: { fill: [255, 215, 109], edge: [255, 237, 162] },
 };
 
 const visualEffects = [];
@@ -599,6 +607,7 @@ function canModifyTowers() {
 }
 
 function closeSlotPopout() {
+  rangePreviewTowerId = null;
   elSlotPopout.classList.add('hidden');
   elSlotPopout.innerHTML = '';
   slotPopoutRenderKey = '';
@@ -690,6 +699,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
   selectedSlotId = slot.id;
   const tower = game.getTower(slot.id);
   const buildPhase = canModifyTowers();
+  rangePreviewTowerId = null;
 
   elSlotPopout.innerHTML = '';
   elSlotPopout.classList.remove('hidden');
@@ -702,7 +712,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
   helper.textContent = tower
     ? 'Upgrade or inspect this tower.'
     : buildPhase
-      ? 'Pick a tower to build on this slot.'
+      ? 'Pick a tower to build on this slot. Hover an option to preview its range.'
       : 'Building is locked right now.';
   elSlotPopout.appendChild(helper);
 
@@ -730,24 +740,40 @@ function renderSlotPopout(slotId = selectedSlotId) {
     for (const cfg of Object.values(TOWER_CONFIG)) {
       const cost = cfg.levels[0].cost;
       const disabled = !buildPhase || game.coins < cost;
-      actions.appendChild(
-        createPopoutAction(
-          `${cfg.name} - ${formatNumber(cost)}c`,
-          `L1 DMG ${cfg.levels[0].damage} | RNG ${cfg.levels[0].range}`,
-          () => {
-            const result = game.buildTower(slot.id, cfg.id);
-            slotPopoutNotice = result.ok ? '' : result.error;
-            if (result.ok) {
-              selectedTowerId = cfg.id;
-              selectedCurveTowerId = cfg.id;
-              elCurveTower.value = selectedCurveTowerId;
-              markCurveDirty();
-            }
-            updateHud();
-          },
-          disabled
-        )
+      const action = createPopoutAction(
+        `${cfg.name} - ${formatNumber(cost)}c`,
+        `L1 DMG ${cfg.levels[0].damage} | RNG ${cfg.levels[0].range}`,
+        () => {
+          const result = game.buildTower(slot.id, cfg.id);
+          slotPopoutNotice = result.ok ? '' : result.error;
+          rangePreviewTowerId = null;
+          if (result.ok) {
+            selectedTowerId = cfg.id;
+            selectedCurveTowerId = cfg.id;
+            elCurveTower.value = selectedCurveTowerId;
+            markCurveDirty();
+          }
+          updateHud();
+        },
+        disabled
       );
+      action.addEventListener('pointerenter', () => {
+        rangePreviewTowerId = cfg.id;
+      });
+      action.addEventListener('pointerleave', () => {
+        if (rangePreviewTowerId === cfg.id) {
+          rangePreviewTowerId = null;
+        }
+      });
+      action.addEventListener('focus', () => {
+        rangePreviewTowerId = cfg.id;
+      });
+      action.addEventListener('blur', () => {
+        if (rangePreviewTowerId === cfg.id) {
+          rangePreviewTowerId = null;
+        }
+      });
+      actions.appendChild(action);
     }
   } else {
     const cfg = TOWER_CONFIG[tower.towerId];
@@ -870,6 +896,114 @@ function drawBuildSlot(slot, isSelected) {
   ctx.arc(0, 0, SLOT_RADIUS - 2, 0, Math.PI * 2);
   ctx.stroke();
 
+  ctx.restore();
+}
+
+function rgba(rgb, alpha) {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+function selectedRangeData() {
+  if (!selectedSlotId) {
+    return null;
+  }
+
+  const slot = game.getBuildSlots().find((candidate) => candidate.id === selectedSlotId);
+  if (!slot) {
+    return null;
+  }
+
+  const tower = game.getTower(slot.id);
+  if (tower) {
+    const cfg = TOWER_CONFIG[tower.towerId];
+    const levelCfg = cfg?.levels[tower.level - 1];
+    if (!levelCfg) {
+      return null;
+    }
+    return {
+      slot,
+      towerId: tower.towerId,
+      range: levelCfg.range,
+      preview: false,
+      label: `${cfg.name} L${tower.level}`,
+    };
+  }
+
+  const towerId = rangePreviewTowerId && TOWER_CONFIG[rangePreviewTowerId]
+    ? rangePreviewTowerId
+    : selectedTowerId in TOWER_CONFIG
+      ? selectedTowerId
+      : 'arrow';
+  const cfg = TOWER_CONFIG[towerId];
+  if (!cfg) {
+    return null;
+  }
+  return {
+    slot,
+    towerId,
+    range: cfg.levels[0].range,
+    preview: true,
+    label: `${cfg.name} L1`,
+  };
+}
+
+function drawSelectedTowerRange() {
+  const data = selectedRangeData();
+  if (!data) {
+    return;
+  }
+
+  const p = normToPx(data.slot);
+  const radius = (data.range / WORLD_SCALE) * canvas.width;
+  const palette = TOWER_RANGE_COLORS[data.towerId] || TOWER_RANGE_COLORS.arrow;
+  const alphaScale = data.preview ? 0.82 : 1;
+
+  ctx.save();
+
+  const spread = ctx.createRadialGradient(p.x, p.y, Math.max(8, radius * 0.18), p.x, p.y, radius);
+  spread.addColorStop(0, rgba(palette.fill, 0.04 * alphaScale));
+  spread.addColorStop(0.7, rgba(palette.fill, 0.17 * alphaScale));
+  spread.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = spread;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.setLineDash([10, 6]);
+  ctx.strokeStyle = rgba(palette.edge, 0.9 * alphaScale);
+  ctx.lineWidth = data.preview ? 2.2 : 2.9;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = rgba(palette.fill, 0.4 * alphaScale);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, Math.max(12, radius - 6), 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = rgba(palette.edge, 0.88 * alphaScale);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const label = `${data.label} RNG ${data.range.toFixed(2)}`;
+  ctx.font = 'bold 11px monospace';
+  const textWidth = ctx.measureText(label).width;
+  const boxWidth = Math.ceil(textWidth) + 14;
+  const boxHeight = 18;
+  const x = Math.max(8, Math.min(canvas.width - boxWidth - 8, p.x - boxWidth * 0.5));
+  const y = Math.max(12, p.y - radius - boxHeight - 8);
+
+  ctx.fillStyle = `rgba(8, 14, 24, ${0.78 * alphaScale})`;
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+  ctx.strokeStyle = rgba(palette.edge, 0.95 * alphaScale);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, boxWidth - 1, boxHeight - 1);
+
+  ctx.fillStyle = `rgba(243, 247, 255, ${0.98 * alphaScale})`;
+  ctx.fillText(label, x + 7, y + 12.5);
   ctx.restore();
 }
 
@@ -1436,6 +1570,7 @@ function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawMapBase();
   drawFireZones();
+  drawSelectedTowerRange();
   drawSlotsAndTowers();
   drawEnemies();
   drawVisualEffects();
