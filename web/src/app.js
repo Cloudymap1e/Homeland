@@ -503,8 +503,9 @@ function rebuildCurveTowerSelect() {
 }
 
 function updateSelectionText() {
-  const map = game.mapConfig;
-  const slot = selectedSlotId ? map.buildSlots.find((candidate) => candidate.id === selectedSlotId) : null;
+  const slot = selectedSlotId
+    ? game.getBuildSlots().find((candidate) => candidate.id === selectedSlotId)
+    : null;
   if (!slot) {
     elSelection.textContent = `Build mode: ${TOWER_CONFIG[selectedTowerId].name}. Click a slot to place.`;
     btnUpgrade.disabled = true;
@@ -678,7 +679,7 @@ function drawTowerSprite(tower, p) {
 }
 
 function drawSlotsAndTowers() {
-  for (const slot of game.mapConfig.buildSlots) {
+  for (const slot of game.getBuildSlots()) {
     const p = normToPx(slot);
     drawBuildSlot(slot, selectedSlotId === slot.id);
 
@@ -1051,7 +1052,7 @@ function pickSlotFromMouse(clientX, clientY) {
   const x = ((clientX - rect.left) / rect.width) * canvas.width;
   const y = ((clientY - rect.top) / rect.height) * canvas.height;
 
-  for (const slot of game.mapConfig.buildSlots) {
+  for (const slot of game.getBuildSlots()) {
     const p = normToPx(slot);
     if (Math.hypot(x - p.x, y - p.y) <= SLOT_RADIUS + 6) {
       return slot;

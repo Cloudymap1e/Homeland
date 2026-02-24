@@ -64,6 +64,17 @@ test('build and upgrade deduct coins correctly', () => {
   assert.equal(tower.level, 2);
 });
 
+test('river-overlap slots are blocked for placement', () => {
+  const game = new HomelandGame({ mapId: 'map_01_river_bend' });
+  const buildableSlotIds = game.getBuildSlots().map((slot) => slot.id);
+
+  assert.equal(buildableSlotIds.includes('s07'), false);
+
+  const buildRes = game.buildTower('s07', 'arrow');
+  assert.equal(buildRes.ok, false);
+  assert.equal(buildRes.error, 'Cannot build in river.');
+});
+
 test('leaks apply penalties and XP floors at zero', () => {
   const game = new HomelandGame();
   game.xp = 3;

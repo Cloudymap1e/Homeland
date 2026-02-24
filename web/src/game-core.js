@@ -2,6 +2,9 @@ import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, ENEMIES, PROGRESSION } from './conf
 
 const WORLD_SCALE = 10;
 const CHAIN_RADIUS = 2.6;
+const MAP_RENDER_WIDTH = 1100;
+const MAP_RENDER_HEIGHT = 680;
+const SLOT_RIVER_CLEARANCE_PX = 16;
 
 function distance(a, b) {
   const dx = a.x - b.x;
@@ -20,6 +23,60 @@ function getPathSegments(points) {
     total += len;
   }
   return { points, segments, length: total };
+}
+
+function toRenderPoint(point) {
+  return {
+    x: point.x * MAP_RENDER_WIDTH,
+    y: point.y * MAP_RENDER_HEIGHT,
+  };
+}
+
+function pointToSegmentDistance(px, py, ax, ay, bx, by) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const abLenSq = abx * abx + aby * aby;
+  const t = abLenSq === 0 ? 0 : Math.max(0, Math.min(1, (apx * abx + apy * aby) / abLenSq));
+  const closestX = ax + abx * t;
+  const closestY = ay + aby * t;
+  return Math.hypot(px - closestX, py - closestY);
+}
+
+function slotToRouteDistancePx(slot, routes) {
+  const slotPoint = toRenderPoint(slot);
+  let minDistance = Number.POSITIVE_INFINITY;
+
+  for (const route of routes) {
+    const points = route.waypoints.map(toRenderPoint);
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const start = points[i];
+      const end = points[i + 1];
+      const d = pointToSegmentDistance(slotPoint.x, slotPoint.y, start.x, start.y, end.x, end.y);
+      if (d < minDistance) {
+        minDistance = d;
+      }
+    }
+  }
+
+  return minDistance;
+}
+
+function partitionBuildSlots(mapConfig) {
+  const buildable = [];
+  const blocked = [];
+
+  for (const slot of mapConfig.buildSlots) {
+    const slotDistance = slotToRouteDistancePx(slot, mapConfig.routes);
+    if (slotDistance < SLOT_RIVER_CLEARANCE_PX) {
+      blocked.push(slot);
+      continue;
+    }
+    buildable.push(slot);
+  }
+
+  return { buildable, blocked };
 }
 
 function positionAtDistance(pathInfo, d) {
@@ -75,6 +132,11 @@ export class HomelandGame {
     this.mapId = next.mapId;
     this.mapConfig = next;
     this.waves = next.waves;
+    const slotSets = partitionBuildSlots(next);
+    this.buildSlots = slotSets.buildable;
+    this.blockedBuildSlots = slotSets.blocked;
+    this.buildSlotsById = new Map(this.buildSlots.map((slot) => [slot.id, slot]));
+    this.blockedBuildSlotsById = new Map(this.blockedBuildSlots.map((slot) => [slot.id, slot]));
     this.routeInfos = next.routes.map((route, routeIndex) => ({
       routeId: route.id || `route_${routeIndex + 1}`,
       routeIndex,
@@ -144,8 +206,11 @@ export class HomelandGame {
       return { ok: false, error: 'Insufficient coins.' };
     }
 
-    const slot = this.mapConfig.buildSlots.find((candidate) => candidate.id === slotId);
+    const slot = this.buildSlotsById.get(slotId);
     if (!slot) {
+      if (this.blockedBuildSlotsById.has(slotId)) {
+        return { ok: false, error: 'Cannot build in river.' };
+      }
       return { ok: false, error: 'Unknown slot.' };
     }
 
@@ -544,6 +609,10 @@ export class HomelandGame {
 
   getTower(slotId) {
     return this.towers.get(slotId) || null;
+  }
+
+  getBuildSlots() {
+    return this.buildSlots;
   }
 }
 
