@@ -17,7 +17,8 @@ const MIME = {
 };
 
 function resolvePath(urlPath) {
-  const rawPath = urlPath === '/' ? '/index.html' : urlPath;
+  const pathname = new URL(urlPath || '/', 'http://localhost').pathname;
+  const rawPath = pathname === '/' ? '/index.html' : pathname;
   const safePath = normalize(rawPath).replace(/^\/+/, '');
   return join(ROOT, safePath);
 }
@@ -27,7 +28,13 @@ const server = createServer(async (req, res) => {
     const path = resolvePath(req.url || '/');
     const file = await readFile(path);
     const type = MIME[extname(path)] || 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type });
+    res.writeHead(200, {
+      'content-type': type,
+      // Avoid stale browser/CDN content while iterating quickly on visuals.
+      'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+      pragma: 'no-cache',
+      expires: '0',
+    });
     res.end(file);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
