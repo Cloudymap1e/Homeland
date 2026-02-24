@@ -160,7 +160,8 @@ DNS authority for this project:
 This script:
 - creates tunnel `homeland-web` if missing,
 - routes DNS for `homeland.secana.top`,
-- writes `~/.cloudflared/config.yml` with ingress to `http://127.0.0.1:4173`.
+- writes project-local `/Users/rc/Project/Homeland/.cloudflared/config.yml` with ingress to `http://127.0.0.1:4173`.
+- should not overwrite tunnel config for other projects.
 
 ### Run publish
 

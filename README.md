@@ -295,6 +295,8 @@ npm run dev
 ./scripts/cloudflare-tunnel-run.sh
 ```
 
+`cloudflare-tunnel-setup.sh` writes project-local tunnel config at `/Users/rc/Project/Homeland/.cloudflared/config.yml` to avoid collisions with other projects.
+
 Quick public URL without DNS mapping:
 
 ```bash

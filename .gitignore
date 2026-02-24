@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.cloudflared/config.yml
+.cloudflared/*.json
+.playwright-cli/

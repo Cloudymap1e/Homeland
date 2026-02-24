@@ -12,6 +12,6 @@
     "balance:cuda-check": "node scripts/balance-sim.mjs --runs=400 --maps=all --workers=auto --cuda --suite=quick --policies=random_all",
     "balance:gs75": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --cuda-required --suite=full --policies=random_all",
     "tunnel:quick": "cloudflared tunnel --url http://localhost:4173",
-    "tunnel:run": "cloudflared tunnel run homeland-web"
+    "tunnel:run": "./scripts/cloudflare-tunnel-run.sh"
   }
 }

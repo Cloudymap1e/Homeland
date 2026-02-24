@@ -1,5 +1,5 @@
 tunnel: <TUNNEL_UUID>
-credentials-file: /Users/<USER>/.cloudflared/<TUNNEL_UUID>.json
+credentials-file: /Users/<USER>/Project/Homeland/.cloudflared/<TUNNEL_UUID>.json
 
 ingress:
   - hostname: homeland.secana.top
