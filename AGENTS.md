@@ -108,6 +108,15 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Test command: `npm test`.
 - Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
 
+## Monte Carlo Balancing (GS75 CUDA-First Rule)
+
+- When running balancing simulations on machine `GS75`, always try CUDA acceleration first.
+- Required first attempt on GS75:
+  - `cd /Users/rc/Project/Homeland`
+  - `npm run balance:gs75`
+- The simulation runner performs CUDA detection when `--cuda` is enabled and should be treated as the default GS75 path.
+- If CUDA is unavailable on GS75, record that explicitly in the run notes and fall back to CPU worker-thread mode (do not silently skip CUDA attempt).
+
 ## Cloudflare Tunnel Publish (Required Hostname)
 
 Publish target must be:

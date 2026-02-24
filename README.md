@@ -224,6 +224,20 @@ cd /Users/rc/Project/Homeland
 npm test
 ```
 
+Monte Carlo balance run (1,000 simulations, all maps):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:sim
+```
+
+GS75 CUDA-first balance run:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:gs75
+```
+
 Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.
 
 ## Cloudflare Tunnel Publish
