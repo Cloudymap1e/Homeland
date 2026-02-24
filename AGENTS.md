@@ -171,6 +171,14 @@ This script:
 2. Start tunnel:
 - `./scripts/cloudflare-tunnel-run.sh`
 
+### Default Live Update Rule
+
+- After implementing project changes, publish to `homeland.secana.top` by default (unless user explicitly says not to publish).
+- Minimum publish verification:
+  - `curl -I https://homeland.secana.top` must return HTTP `200`,
+  - fetch page HTML and verify the expected new UI/content marker is present.
+- If one-time setup blocks on browser login but token credentials already exist locally (for example from another project), reuse those stored Cloudflare tunnel credentials and continue with token-based tunnel run.
+
 ### Quick temporary URL (no custom domain)
 
 - `npm run tunnel:quick`
