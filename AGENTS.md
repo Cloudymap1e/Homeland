@@ -123,10 +123,15 @@ Use a data-driven architecture so balancing and content expansion are easy.
 
 - Balance validation must include diversity and controlled-variable checks, not only a single mixed policy run.
 - Required coverage in a balancing cycle:
-  - mixed baseline (`balanced` policy),
+  - random baseline (`random_all` policy using initial map coins),
+  - mixed baseline (`balanced` policy) for tower composition comparison,
   - mono tower scenarios (arrow, bomb, fire, wind, lightning),
   - duo tower scenarios (at least 3 combinations),
   - OAT sensitivity for `windSlowMult`, `bombSplashMult`, `fireDpsMult`.
+- Campaign random-policy difficulty targets should trend near:
+  - Map 1 clear rate: ~90%
+  - Map 2 clear rate: ~85%
+  - Map 3 clear rate: ~80%
 - Use:
   - `npm run balance:sim` for full search + diversity + OAT,
   - `npm run balance:diversity` for faster no-search diversity/OAT reruns.

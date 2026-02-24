@@ -43,10 +43,10 @@ function createArrowLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costFromAnchors(level, [420, 740, 1380, 2450, 4000, 6500]),
-      damage: intFromAnchors(level, [42, 120, 230, 360, 520, 720]),
-      range: floatFromAnchors(level, [2.9, 3.12, 3.34, 3.56, 3.78, 4.0]),
-      attackSpeed: floatFromAnchors(level, [1.18, 1.6, 2.02, 2.45, 2.8, 3.2]),
+      cost: costFromAnchors(level, [460, 820, 1550, 2750, 4600, 7400]),
+      damage: intFromAnchors(level, [40, 110, 206, 318, 455, 620]),
+      range: floatFromAnchors(level, [2.86, 3.06, 3.26, 3.46, 3.64, 3.82]),
+      attackSpeed: floatFromAnchors(level, [1.14, 1.5, 1.84, 2.18, 2.46, 2.8]),
     });
   }
   return levels;
@@ -57,12 +57,12 @@ function createBombLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costFromAnchors(level, [700, 1400, 2600, 4700, 8200, 14000]),
-      damage: intFromAnchors(level, [120, 220, 360, 540, 760, 980]),
+      cost: costFromAnchors(level, [780, 1560, 2940, 5300, 9200, 15600]),
+      damage: intFromAnchors(level, [112, 198, 324, 486, 682, 890]),
       range: floatFromAnchors(level, [2.6, 2.75, 2.9, 3.05, 3.2, 3.35]),
-      attackSpeed: floatFromAnchors(level, [0.52, 0.64, 0.77, 0.9, 1.03, 1.16]),
-      splashRadius: floatFromAnchors(level, [1.4, 1.6, 1.85, 2.1, 2.35, 2.6]),
-      splashFalloff: intFromAnchors(level, [45, 44, 42, 40, 37, 34]),
+      attackSpeed: floatFromAnchors(level, [0.5, 0.61, 0.72, 0.85, 0.98, 1.1]),
+      splashRadius: floatFromAnchors(level, [1.34, 1.52, 1.74, 1.96, 2.18, 2.4]),
+      splashFalloff: intFromAnchors(level, [46, 45, 43, 41, 39, 36]),
     });
   }
   return levels;
@@ -73,13 +73,13 @@ function createFireLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costFromAnchors(level, [860, 2150, 4100, 7600, 13000, 22000]),
-      damage: intFromAnchors(level, [45, 60, 88, 124, 166, 220]),
+      cost: costFromAnchors(level, [900, 2260, 4400, 8200, 14200, 23800]),
+      damage: intFromAnchors(level, [42, 56, 82, 116, 156, 206]),
       range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
-      attackSpeed: floatFromAnchors(level, [0.72, 0.86, 0.98, 1.1, 1.22, 1.34]),
-      fireballDps: intFromAnchors(level, [44, 62, 92, 130, 178, 238]),
+      attackSpeed: floatFromAnchors(level, [0.68, 0.81, 0.93, 1.04, 1.15, 1.26]),
+      fireballDps: intFromAnchors(level, [40, 56, 84, 118, 162, 214]),
       fireballDuration: 3.0,
-      fireballRadius: floatFromAnchors(level, [0.72, 0.82, 0.92, 1.0, 1.1, 1.18]),
+      fireballRadius: floatFromAnchors(level, [0.7, 0.78, 0.86, 0.94, 1.03, 1.12]),
     });
   }
   return levels;
@@ -100,12 +100,12 @@ function createWindLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costFromAnchors(level, [760, 1400, 2600, 4700, 8200, 14000]),
-      damage: intFromAnchors(level, [18, 70, 140, 220, 320, 440]),
-      range: floatFromAnchors(level, [3.1, 3.35, 3.6, 3.85, 4.1, 4.3]),
-      attackSpeed: floatFromAnchors(level, [0.96, 1.24, 1.52, 1.8, 2.1, 2.35]),
-      slowPercent: intFromAnchors(level, [40, 56, 68, 76, 84, 90]),
-      slowDuration: floatFromAnchors(level, [2.2, 2.8, 3.3, 3.8, 4.3, 4.8]),
+      cost: costFromAnchors(level, [820, 1560, 2920, 5300, 9300, 15600]),
+      damage: intFromAnchors(level, [17, 62, 124, 194, 278, 374]),
+      range: floatFromAnchors(level, [3.05, 3.28, 3.5, 3.72, 3.94, 4.14]),
+      attackSpeed: floatFromAnchors(level, [0.9, 1.15, 1.4, 1.66, 1.94, 2.16]),
+      slowPercent: intFromAnchors(level, [39, 54, 64, 72, 80, 86]),
+      slowDuration: floatFromAnchors(level, [2.1, 2.6, 3.1, 3.5, 3.9, 4.4]),
       windTargets: windTargetsByLevel(level),
     });
   }
@@ -130,12 +130,12 @@ function createLightningLevels() {
   for (let level = 1; level <= MAX_TOWER_LEVEL; level += 1) {
     levels.push({
       level,
-      cost: costFromAnchors(level, [900, 1600, 3000, 5600, 10200, 18000]),
-      damage: intFromAnchors(level, [58, 122, 220, 360, 530, 760]),
-      range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
-      attackSpeed: floatFromAnchors(level, [0.8, 0.96, 1.12, 1.28, 1.44, 1.58]),
+      cost: costFromAnchors(level, [960, 1760, 3340, 6260, 11400, 20500]),
+      damage: intFromAnchors(level, [54, 112, 198, 318, 460, 648]),
+      range: floatFromAnchors(level, [2.76, 2.96, 3.16, 3.36, 3.56, 3.76]),
+      attackSpeed: floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5]),
       chainCount: lightningChainsByLevel(level),
-      chainFalloff: intFromAnchors(level, [35, 32, 28, 24, 20, 16]),
+      chainFalloff: intFromAnchors(level, [38, 35, 32, 28, 24, 20]),
     });
   }
   return levels;
@@ -230,9 +230,9 @@ export const MAPS = {
     seed: 101,
     startingCoins: 10000,
     startingXp: 0,
-    leakPenalty: { coins: 145, xp: 8 },
+    leakPenalty: { coins: 235, xp: 8 },
     unlockRequirement: { nextMap: 'map_02_split_delta', minXp: 2200 },
-    enemyScale: { hp: 1.0, speed: 1.0, rewards: 1.0 },
+    enemyScale: { hp: 1.18, speed: 1.08, rewards: 0.74 },
     xpWaveBonus: 14,
     xpMapBonus: 190,
     routes: [
@@ -287,9 +287,9 @@ export const MAPS = {
     seed: 209,
     startingCoins: 12000,
     startingXp: 0,
-    leakPenalty: { coins: 170, xp: 10 },
+    leakPenalty: { coins: 235, xp: 10 },
     unlockRequirement: { nextMap: 'map_03_marsh_maze', minXp: 3600 },
-    enemyScale: { hp: 1.13, speed: 1.04, rewards: 1.22 },
+    enemyScale: { hp: 1.2, speed: 1.06, rewards: 0.82 },
     xpWaveBonus: 20,
     xpMapBonus: 300,
     routes: [
@@ -356,11 +356,11 @@ export const MAPS = {
     mapId: 'map_03_marsh_maze',
     name: 'Map 3 - Marsh Maze',
     seed: 317,
-    startingCoins: 14000,
+    startingCoins: 19000,
     startingXp: 0,
-    leakPenalty: { coins: 220, xp: 14 },
+    leakPenalty: { coins: 275, xp: 14 },
     unlockRequirement: { nextMap: 'map_04_future', minXp: 6200 },
-    enemyScale: { hp: 1.25, speed: 1.09, rewards: 1.4 },
+    enemyScale: { hp: 1.27, speed: 1.09, rewards: 0.81 },
     xpWaveBonus: 28,
     xpMapBonus: 460,
     routes: [

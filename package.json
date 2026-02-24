@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "test": "node --test web/tests/*.test.mjs",
-    "balance:sim": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --suite=full",
-    "balance:verify": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --skip-search --suite=quick",
-    "balance:diversity": "node scripts/balance-sim.mjs --runs=600 --maps=all --workers=auto --skip-search --suite=full",
-    "balance:cuda-check": "node scripts/balance-sim.mjs --runs=400 --maps=all --workers=auto --cuda --suite=quick",
-    "balance:gs75": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --cuda-required --suite=full",
+    "balance:sim": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --suite=full --policies=random_all",
+    "balance:verify": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --skip-search --suite=quick --policies=random_all",
+    "balance:diversity": "node scripts/balance-sim.mjs --runs=600 --maps=all --workers=auto --skip-search --suite=full --policies=random_all",
+    "balance:cuda-check": "node scripts/balance-sim.mjs --runs=400 --maps=all --workers=auto --cuda --suite=quick --policies=random_all",
+    "balance:gs75": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --cuda-required --suite=full --policies=random_all",
     "tunnel:quick": "cloudflared tunnel --url http://localhost:4173",
     "tunnel:run": "cloudflared tunnel run homeland-web"
   }

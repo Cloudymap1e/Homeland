@@ -13,6 +13,9 @@ const MONO_POLICIES = ['mono_arrow', 'mono_bomb', 'mono_fire', 'mono_wind', 'mon
 
 const TARGETS = {
   map_01_river_bend: {
+    clearMin: 0.84,
+    clearMax: 0.94,
+    clearCenter: 0.9,
     qualityMin: 0.7,
     qualityMax: 0.9,
     qualityCenter: 0.8,
@@ -22,6 +25,9 @@ const TARGETS = {
     qualityLeakCap: 12,
   },
   map_02_split_delta: {
+    clearMin: 0.79,
+    clearMax: 0.89,
+    clearCenter: 0.85,
     qualityMin: 0.58,
     qualityMax: 0.82,
     qualityCenter: 0.7,
@@ -31,6 +37,9 @@ const TARGETS = {
     qualityLeakCap: 18,
   },
   map_03_marsh_maze: {
+    clearMin: 0.74,
+    clearMax: 0.84,
+    clearCenter: 0.8,
     qualityMin: 0.45,
     qualityMax: 0.72,
     qualityCenter: 0.58,
@@ -192,7 +201,7 @@ function parseArgs(argv) {
     suite: 'full',
     diversityRuns: null,
     oatRuns: null,
-    policies: 'balanced',
+    policies: 'random_all',
   };
 
   for (const arg of argv) {
@@ -242,13 +251,13 @@ function parsePolicyIds(raw) {
   }
   const requested = raw.split(',').map((id) => id.trim()).filter(Boolean);
   if (!requested.length) {
-    return ['balanced'];
+    return ['random_all'];
   }
   return requested.filter((id) => Boolean(POLICIES[id]));
 }
 
 function getPolicy(policyId) {
-  return POLICIES[policyId] || POLICIES.balanced;
+  return POLICIES[policyId] || POLICIES.random_all;
 }
 
 function createRng(seed) {
@@ -463,7 +472,63 @@ function tryUpgradeAction(game, rand, waveIndex, policy) {
   return game.upgradeTower(pick.tower.slotId).ok;
 }
 
+function affordableBuilds(game, policy) {
+  return Object.values(TOWER_CONFIG)
+    .filter((cfg) => policy.allowed.includes(cfg.id) && cfg.levels[0].cost <= game.coins)
+    .map((cfg) => cfg.id);
+}
+
+function affordableUpgrades(game, policy) {
+  return getUpgradeableTowers(game)
+    .filter((tower) => policy.allowed.includes(tower.towerId))
+    .filter((tower) => upgradeCost(tower) <= game.coins);
+}
+
+function runRandomBuildPhase(game, rand, policy) {
+  const actions = 2 + Math.floor(rand() * 7);
+  for (let i = 0; i < actions; i += 1) {
+    const hasEmptySlot = getEmptySlots(game).length > 0;
+    const buildChoices = hasEmptySlot ? affordableBuilds(game, policy) : [];
+    const upgradeChoices = affordableUpgrades(game, policy);
+    const canBuild = buildChoices.length > 0;
+    const canUpgrade = upgradeChoices.length > 0;
+
+    if (!canBuild && !canUpgrade) {
+      break;
+    }
+
+    const buildBias = getBuiltTowers(game).length < 8 ? 0.62 : 0.42;
+    const wantBuild = canBuild && (!canUpgrade || rand() < buildBias);
+
+    if (wantBuild) {
+      const towerId = pickRandom(rand, buildChoices);
+      if (tryBuildSpecific(game, rand, towerId, policy)) {
+        continue;
+      }
+    }
+
+    if (canUpgrade) {
+      const tower = pickRandom(rand, upgradeChoices);
+      if (game.upgradeTower(tower.slotId).ok) {
+        continue;
+      }
+    }
+
+    if (canBuild) {
+      const towerId = pickRandom(rand, buildChoices);
+      if (tryBuildSpecific(game, rand, towerId, policy)) {
+        continue;
+      }
+    }
+  }
+}
+
 function runBuildPhase(game, rand, mapId, policy) {
+  if (policy.id === 'random_all') {
+    runRandomBuildPhase(game, rand, policy);
+    return;
+  }
+
   const waveIndex = Math.max(0, game.waveIndex + 1);
   const actions = 3 + Math.floor(rand() * 5);
   const wantedTowers = desiredTowerCount(game, waveIndex);
@@ -681,6 +746,12 @@ function clampPenalty(value, min, max, center) {
 }
 
 function mapScore(summary, target) {
+  const clearPenalty = clampPenalty(
+    summary.clearRate,
+    target.clearMin,
+    target.clearMax,
+    target.clearCenter
+  );
   const qualityPenalty = clampPenalty(
     summary.qualityRate,
     target.qualityMin,
@@ -693,7 +764,7 @@ function mapScore(summary, target) {
     target.leaksMax,
     target.leaksCenter
   );
-  return qualityPenalty * 3.2 + leaksPenalty * 1.5;
+  return clearPenalty * 4.2 + qualityPenalty * 2.8 + leaksPenalty * 1.5;
 }
 
 function scoreCandidate(byMap, multipliers, mapIds) {
@@ -710,6 +781,8 @@ function scoreCandidate(byMap, multipliers, mapIds) {
 
 function inTarget(summary, target) {
   return (
+    summary.clearRate >= target.clearMin &&
+    summary.clearRate <= target.clearMax &&
     summary.qualityRate >= target.qualityMin &&
     summary.qualityRate <= target.qualityMax &&
     summary.avgLeaks >= target.leaksMin &&
@@ -723,6 +796,7 @@ function scoreInBand(byMap, multipliers, mapIds) {
     const summary = byMap[mapId];
     return (
       sum +
+      Math.abs(summary.clearRate - target.clearCenter) * 4.2 +
       Math.abs(summary.qualityRate - target.qualityCenter) * 3 +
       Math.abs(summary.avgLeaks - target.leaksCenter) * 1.4
     );
@@ -977,7 +1051,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const mapIds = parseMapIds(args.maps);
   const primaryPolicyIds = parsePolicyIds(args.policies);
-  const policyId = primaryPolicyIds[0] || 'balanced';
+  const policyId = primaryPolicyIds[0] || 'random_all';
   const baselineMultipliers = { windSlowMult: 1, bombSplashMult: 1, fireDpsMult: 1 };
   const searchRuns = args.searchRuns || Math.max(80, Math.round(args.runs * SEARCH_FRACTION));
 
@@ -1123,7 +1197,7 @@ async function main() {
       runs: oatRuns,
       workers,
       baseMultipliers: selectedMultipliers,
-      policyId: 'balanced',
+      policyId,
     });
     console.log(JSON.stringify(oat, null, 2));
   }

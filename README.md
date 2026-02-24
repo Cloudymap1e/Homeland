@@ -208,7 +208,11 @@ Primary runtime is now browser-based JS:
 - tower placement and upgrades,
 - wave spawning, pathing, combat, and effects,
 - coin and XP progression,
-- win/loss loop for Map 1.
+- win/loss loop for multi-map campaign.
+
+Runtime control additions:
+- `Fast 1s Fleet Run`: compresses an active wave into about one second of wall time.
+- `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
 
 Run local web prototype:
 
@@ -235,7 +239,13 @@ This command runs:
 - multipliers search,
 - full 1,000-run verification,
 - diversity scenario matrix (mono/duo/mixed),
-- controlled OAT sensitivity checks (one factor at a time).
+- controlled OAT sensitivity checks (one factor at a time),
+- random policy baseline (`random_all`) with initial map coins.
+
+Current random-policy balance intent (not strict hard limits):
+- Map 1 clear rate near 90%,
+- Map 2 clear rate near 85%,
+- Map 3 clear rate near 80%.
 
 Fast 1,000-run verification only (skip multiplier search):
 
