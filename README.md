@@ -25,15 +25,15 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 - Role: stable single-target DPS
 - Typical behavior: medium range, medium fire rate, low-to-medium damage
 
-2. Bone Tower
-- Role: heavier physical damage
-- Typical behavior: slower attack speed, higher per-hit damage
+2. Bomb Tower
+- Role: heavy burst damage + splash damage
+- Typical behavior: slower attack speed, high direct hit, AOE splash in nearby radius
 
 3. Magic Tower
 - Role: elemental effects and burst utility
 - Initial elements:
-  - Fire (damage-over-time)
-  - Wind (slow/disrupt)
+  - Fire (fireball impact + persistent 3-second burn zone)
+  - Wind (multi-target slow control)
   - Lightning (burst or chain)
 
 ### Enemy Fleets (Pirate Boats)

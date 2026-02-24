@@ -26,10 +26,10 @@ This file defines how agents and contributors should execute work for this proje
 ## Tower Set (Initial)
 
 - Arrow Tower: consistent single-target physical damage.
-- Bone Tower: slower rate, heavier hit / armor-breaking profile.
+- Bomb Tower: high direct damage with splash damage in area.
 - Magic Tower (element variants):
-  - Fire: burn-over-time.
-  - Wind: attack speed or movement disruption effects.
+  - Fire: fireball impact with 3-second persistent burn zone.
+  - Wind: fleet slow-control with multi-target effect by level.
   - Lightning: chain or burst magic damage.
 
 Keep balancing data in config files, not hardcoded in gameplay systems.
