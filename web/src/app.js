@@ -276,6 +276,16 @@ function updateSelectionText() {
   const cfg = TOWER_CONFIG[tower.towerId];
   const levelCfg = cfg.levels[tower.level - 1];
   let text = `${cfg.name} at ${slot.id}\nLevel ${tower.level} | DMG ${levelCfg.damage} | RNG ${levelCfg.range}`;
+  if (cfg.effectType === 'wind') {
+    text += `\nSlow: ${levelCfg.slowPercent}% for ${levelCfg.slowDuration}s`;
+    text += `\nTargets: ${levelCfg.windTargets}`;
+  }
+  if (cfg.effectType === 'fire') {
+    text += `\nFireball: ${levelCfg.fireballDps}/s for ${levelCfg.fireballDuration}s`;
+  }
+  if (cfg.effectType === 'bomb') {
+    text += `\nSplash radius: ${levelCfg.splashRadius}`;
+  }
   if (tower.level < cfg.levels.length) {
     const nextCost = cfg.levels[tower.level].cost;
     text += `\nUpgrade cost: ${nextCost}`;
@@ -434,6 +444,24 @@ function drawSlotsAndTowers() {
   }
 }
 
+function drawFireZones() {
+  for (const zone of game.fireZones || []) {
+    const p = normToPx(zone);
+    const radius = (zone.radius / 10) * canvas.width;
+    const alpha = Math.min(0.42, 0.16 + (zone.durationLeft / 3) * 0.24);
+
+    const ring = ctx.createRadialGradient(p.x, p.y, radius * 0.2, p.x, p.y, radius);
+    ring.addColorStop(0, `rgba(255, 120, 60, ${alpha})`);
+    ring.addColorStop(0.6, `rgba(242, 85, 40, ${alpha * 0.85})`);
+    ring.addColorStop(1, 'rgba(145, 28, 20, 0)');
+
+    ctx.fillStyle = ring;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawBoat(enemy, p, angle) {
   const isScout = enemy.enemyType === 'scout';
   const isRaider = enemy.enemyType === 'raider';
@@ -521,6 +549,8 @@ function drawAttackTraces() {
     ctx.lineWidth = attack.effectType === 'wind' ? 2.2 : 2.4;
     ctx.strokeStyle = attack.effectType === 'fire'
       ? 'rgba(255,123,87,0.82)'
+      : attack.effectType === 'bomb'
+        ? 'rgba(246,185,92,0.78)'
       : attack.effectType === 'wind'
         ? 'rgba(152,237,255,0.74)'
         : 'rgba(236,228,193,0.72)';
@@ -566,6 +596,7 @@ function drawWaveBanner() {
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawMapBase();
+  drawFireZones();
   drawSlotsAndTowers();
   drawEnemies();
   drawAttackTraces();

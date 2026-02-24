@@ -62,6 +62,7 @@ export class HomelandGame {
     this.enemies = [];
     this.nextEnemyId = 1;
     this.towers = new Map();
+    this.fireZones = [];
     this.lastAttacks = [];
     this.result = null;
     this.events = [];
@@ -191,6 +192,22 @@ export class HomelandGame {
   }
 
   updateEffects(dt) {
+    for (const zone of this.fireZones) {
+      zone.durationLeft = Math.max(0, zone.durationLeft - dt);
+      for (const enemy of this.enemies) {
+        const enemyPos = positionAtDistance(this.pathInfo, enemy.distance);
+        const d = Math.hypot(
+          (enemyPos.x - zone.x) * WORLD_SCALE,
+          (enemyPos.y - zone.y) * WORLD_SCALE
+        );
+        if (d <= zone.radius) {
+          enemy.hp -= zone.dps * dt;
+        }
+      }
+    }
+
+    this.fireZones = this.fireZones.filter((zone) => zone.durationLeft > 0);
+
     for (const enemy of this.enemies) {
       if (enemy.burnDurationLeft > 0) {
         enemy.hp -= enemy.burnDps * dt;
@@ -233,6 +250,21 @@ export class HomelandGame {
       }
 
       tower.cooldown = 1 / levelCfg.attackSpeed;
+      if (cfg.effectType === 'fire') {
+        this.applyFireball(tower, target, levelCfg);
+        continue;
+      }
+
+      if (cfg.effectType === 'wind') {
+        this.applyWindControl(tower, levelCfg);
+        continue;
+      }
+
+      if (cfg.effectType === 'bomb') {
+        this.applyBombSplash(tower, target, levelCfg);
+        continue;
+      }
+
       target.hp -= levelCfg.damage;
       this.lastAttacks.push({
         from: { x: tower.x, y: tower.y },
@@ -240,34 +272,87 @@ export class HomelandGame {
         effectType: cfg.effectType,
       });
 
-      if (cfg.effectType === 'fire') {
-        target.burnDps = Math.max(target.burnDps, levelCfg.burnDps || 0);
-        target.burnDurationLeft = levelCfg.burnDuration || 0;
-      }
-
-      if (cfg.effectType === 'wind') {
-        target.slowPercent = Math.max(target.slowPercent, levelCfg.slowPercent || 0);
-        target.slowDurationLeft = Math.max(target.slowDurationLeft, levelCfg.slowDuration || 0);
-      }
-
       if (cfg.effectType === 'lightning') {
         this.applyLightningChain(target, levelCfg.damage, levelCfg.chainFalloff || 0, levelCfg.chainCount || 0);
       }
     }
   }
 
-  pickTarget(tower, rangeUnits) {
-    let best = null;
-    let bestDistance = -Infinity;
+  applyFireball(tower, target, levelCfg) {
+    target.hp -= levelCfg.damage;
+    const targetPos = positionAtDistance(this.pathInfo, target.distance);
+    this.lastAttacks.push({
+      from: { x: tower.x, y: tower.y },
+      to: targetPos,
+      effectType: 'fire',
+    });
+    this.fireZones.push({
+      x: targetPos.x,
+      y: targetPos.y,
+      radius: levelCfg.fireballRadius || 1.0,
+      dps: levelCfg.fireballDps || 0,
+      durationLeft: levelCfg.fireballDuration || 3.0,
+    });
+  }
+
+  applyWindControl(tower, levelCfg) {
+    const targets = this.getTargetsInRange(tower, levelCfg.range, levelCfg.windTargets || 1);
+    for (const target of targets) {
+      target.hp -= levelCfg.damage;
+      target.slowPercent = Math.max(target.slowPercent, levelCfg.slowPercent || 0);
+      target.slowDurationLeft = Math.max(target.slowDurationLeft, levelCfg.slowDuration || 0);
+      this.lastAttacks.push({
+        from: { x: tower.x, y: tower.y },
+        to: positionAtDistance(this.pathInfo, target.distance),
+        effectType: 'wind',
+      });
+    }
+  }
+
+  applyBombSplash(tower, target, levelCfg) {
+    target.hp -= levelCfg.damage;
+    const targetPos = positionAtDistance(this.pathInfo, target.distance);
+    const splashRadius = levelCfg.splashRadius || 0;
+    const splashDamage = levelCfg.damage * (1 - (levelCfg.splashFalloff || 0) / 100);
+
+    this.lastAttacks.push({
+      from: { x: tower.x, y: tower.y },
+      to: targetPos,
+      effectType: 'bomb',
+    });
+
+    if (splashRadius <= 0 || splashDamage <= 0) {
+      return;
+    }
+
     for (const enemy of this.enemies) {
-      const pos = positionAtDistance(this.pathInfo, enemy.distance);
-      const d = Math.hypot((tower.x - pos.x) * WORLD_SCALE, (tower.y - pos.y) * WORLD_SCALE);
-      if (d <= rangeUnits && enemy.distance > bestDistance) {
-        best = enemy;
-        bestDistance = enemy.distance;
+      if (enemy.id === target.id) {
+        continue;
+      }
+      const enemyPos = positionAtDistance(this.pathInfo, enemy.distance);
+      const d = Math.hypot(
+        (enemyPos.x - targetPos.x) * WORLD_SCALE,
+        (enemyPos.y - targetPos.y) * WORLD_SCALE
+      );
+      if (d <= splashRadius) {
+        enemy.hp -= splashDamage;
       }
     }
-    return best;
+  }
+
+  pickTarget(tower, rangeUnits) {
+    const targets = this.getTargetsInRange(tower, rangeUnits, 1);
+    return targets[0] || null;
+  }
+
+  getTargetsInRange(tower, rangeUnits, maxTargets = 1) {
+    const inRange = this.enemies.filter((enemy) => {
+      const pos = positionAtDistance(this.pathInfo, enemy.distance);
+      const d = Math.hypot((tower.x - pos.x) * WORLD_SCALE, (tower.y - pos.y) * WORLD_SCALE);
+      return d <= rangeUnits;
+    });
+    inRange.sort((a, b) => b.distance - a.distance);
+    return inRange.slice(0, Math.max(1, maxTargets));
   }
 
   applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount) {

@@ -40,12 +40,12 @@ export const TOWER_CONFIG = {
   },
   bone: {
     id: 'bone',
-    name: 'Bone Tower',
-    effectType: 'physical',
+    name: 'Bomb Tower',
+    effectType: 'bomb',
     levels: [
-      { level: 1, cost: 700, damage: 95, range: 2.4, attackSpeed: 0.55 },
-      { level: 2, cost: 600, damage: 130, range: 2.5, attackSpeed: 0.6 },
-      { level: 3, cost: 900, damage: 180, range: 2.6, attackSpeed: 0.65 },
+      { level: 1, cost: 700, damage: 120, range: 2.6, attackSpeed: 0.52, splashRadius: 1.0, splashFalloff: 45 },
+      { level: 2, cost: 600, damage: 170, range: 2.8, attackSpeed: 0.56, splashRadius: 1.2, splashFalloff: 40 },
+      { level: 3, cost: 900, damage: 230, range: 3.0, attackSpeed: 0.6, splashRadius: 1.4, splashFalloff: 35 },
     ],
   },
   magic_fire: {
@@ -53,9 +53,9 @@ export const TOWER_CONFIG = {
     name: 'Magic Fire',
     effectType: 'fire',
     levels: [
-      { level: 1, cost: 800, damage: 26, range: 2.7, attackSpeed: 0.9, burnDps: 12, burnDuration: 2.5 },
-      { level: 2, cost: 700, damage: 34, range: 2.9, attackSpeed: 0.95, burnDps: 18, burnDuration: 2.8 },
-      { level: 3, cost: 1000, damage: 45, range: 3.0, attackSpeed: 1.0, burnDps: 24, burnDuration: 3.0 },
+      { level: 1, cost: 800, damage: 48, range: 2.8, attackSpeed: 0.82, fireballDps: 70, fireballDuration: 3.0, fireballRadius: 0.9 },
+      { level: 2, cost: 700, damage: 66, range: 3.0, attackSpeed: 0.86, fireballDps: 95, fireballDuration: 3.0, fireballRadius: 1.1 },
+      { level: 3, cost: 1000, damage: 84, range: 3.2, attackSpeed: 0.9, fireballDps: 120, fireballDuration: 3.0, fireballRadius: 1.3 },
     ],
   },
   magic_wind: {
@@ -63,9 +63,9 @@ export const TOWER_CONFIG = {
     name: 'Magic Wind',
     effectType: 'wind',
     levels: [
-      { level: 1, cost: 760, damage: 20, range: 2.9, attackSpeed: 0.95, slowPercent: 22, slowDuration: 1.8 },
-      { level: 2, cost: 650, damage: 28, range: 3.0, attackSpeed: 1.0, slowPercent: 28, slowDuration: 2.0 },
-      { level: 3, cost: 980, damage: 36, range: 3.2, attackSpeed: 1.05, slowPercent: 34, slowDuration: 2.2 },
+      { level: 1, cost: 760, damage: 14, range: 3.0, attackSpeed: 0.92, slowPercent: 26, slowDuration: 2.2, windTargets: 3 },
+      { level: 2, cost: 650, damage: 20, range: 3.2, attackSpeed: 0.95, slowPercent: 34, slowDuration: 2.5, windTargets: 5 },
+      { level: 3, cost: 980, damage: 28, range: 3.4, attackSpeed: 0.98, slowPercent: 42, slowDuration: 2.8, windTargets: 6 },
     ],
   },
   magic_lightning: {
