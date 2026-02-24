@@ -99,3 +99,53 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Data is configurable without code edits.
 - Basic edge cases are handled.
 - README and relevant docs are updated.
+
+## Runtime Stack
+
+- Primary implementation stack: JavaScript/TypeScript-oriented web runtime.
+- Main playable prototype location: `/Users/rc/Project/Homeland/web`.
+- Dev server command: `npm run dev` (serves `web/` on `http://127.0.0.1:4173`).
+- Test command: `npm test`.
+- Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
+
+## Cloudflare Tunnel Publish (Required Hostname)
+
+Publish target must be:
+- `homeland.secana.top`
+
+DNS authority for this project:
+- Use the currently active `secana.top` Cloudflare zone.
+- Do not switch nameservers just to publish this app if the zone is already active.
+
+### One-time setup
+
+1. Authenticate cloudflared:
+- `cloudflared tunnel login`
+
+2. Create/configure tunnel and DNS route:
+- `cd /Users/rc/Project/Homeland`
+- `./scripts/cloudflare-tunnel-setup.sh`
+
+This script:
+- creates tunnel `homeland-web` if missing,
+- routes DNS for `homeland.secana.top`,
+- writes `~/.cloudflared/config.yml` with ingress to `http://127.0.0.1:4173`.
+
+### Run publish
+
+1. Start local web app:
+- `cd /Users/rc/Project/Homeland`
+- `npm run dev`
+
+2. Start tunnel:
+- `./scripts/cloudflare-tunnel-run.sh`
+
+### Quick temporary URL (no custom domain)
+
+- `npm run tunnel:quick`
+
+### Files
+
+- Setup script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-setup.sh`
+- Run script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-run.sh`
+- Template config: `/Users/rc/Project/Homeland/.cloudflared/config.yml.example`

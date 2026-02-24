@@ -202,29 +202,51 @@ These numbers should be moved to config and tuned after first playable tests.
 
 ## Prototype Runtime
 
-Core gameplay systems are now implemented in a headless Python prototype:
-- config loader and validation,
-- map pathing and wave spawning,
-- tower placement, upgrades, and combat,
-- coin and XP progression rules,
-- state machine and map result flow,
-- automated tests for core mechanics.
+Primary runtime is now browser-based JS:
+- interactive map/canvas prototype,
+- tower placement and upgrades,
+- wave spawning, pathing, combat, and effects,
+- coin and XP progression,
+- win/loss loop for Map 1.
 
-Run local simulation:
+Run local web prototype:
 
 ```bash
 cd /Users/rc/Project/Homeland
-PYTHONPATH=src python3 -m homeland
+npm run dev
 ```
 
 Run tests:
 
 ```bash
 cd /Users/rc/Project/Homeland
-pytest
+npm test
+```
+
+Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.
+
+## Cloudflare Tunnel Publish
+
+Target hostname: `homeland.secana.top`
+
+Use the currently active `secana.top` Cloudflare zone. Do not change nameservers if the zone is already active.
+
+```bash
+cd /Users/rc/Project/Homeland
+./scripts/cloudflare-tunnel-setup.sh
+npm run dev
+./scripts/cloudflare-tunnel-run.sh
+```
+
+Quick public URL without DNS mapping:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run dev
+npm run tunnel:quick
 ```
 
 ## Current Status
 
-Prototype foundation and core loop logic are implemented and tested.
-Next step is to build the visual/UI prototype layer on top of these systems.
+JS prototype core loop is implemented and tested.
+Cloudflare tunnel scripts/config templates are included for `homeland.secana.top`.
