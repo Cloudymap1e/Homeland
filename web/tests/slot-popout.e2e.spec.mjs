@@ -3,9 +3,8 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.HOMELAND_E2E_BASE_URL || 'http://127.0.0.1:4173';
 
 test('slot popout tower button responds to real click', async ({ page }) => {
+  await page.request.delete(`${BASE_URL}/api/progress`);
   await page.goto(BASE_URL);
-
-  await page.locator('#reset').click();
 
   const coinTextBefore = await page.locator('#coins-overlay').innerText();
   const coinsBefore = Number(coinTextBefore.replaceAll(',', ''));
@@ -45,8 +44,8 @@ test('slot popout tower button responds to real click', async ({ page }) => {
 });
 
 test('can build and upgrade from slot popout during active wave', async ({ page }) => {
+  await page.request.delete(`${BASE_URL}/api/progress`);
   await page.goto(BASE_URL);
-  await page.locator('#reset').click();
   await page.locator('#start-wave').click();
 
   const canvas = page.locator('#game');

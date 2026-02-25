@@ -37,7 +37,6 @@ const btnToggleReportPanel = document.getElementById('toggle-report-panel');
 const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
 const btnHideReportPanel = document.getElementById('hide-report-panel');
 const btnHideCurvePanel = document.getElementById('hide-curve-panel');
-const btnLoadMap = document.getElementById('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
 let selectedTowerId = 'arrow';
@@ -1231,7 +1230,7 @@ function updateHud() {
   btnStartWave.disabled = !['build_phase', 'wave_result'].includes(game.state);
   btnToggleSpeed.textContent = `Speed ${game.speed}x`;
   btnFastForwardWave.textContent = fastForwardUntilMs > 0 ? 'Fast 1s Fleet Run (Active)' : 'Fast 1s Fleet Run';
-  btnToggleAutoContinue.textContent = `Auto Continue: ${autoContinueEnabled ? 'On' : 'Off'}`;
+  btnToggleAutoContinue.textContent = `Auto Waves: ${autoContinueEnabled ? 'On' : 'Off'}`;
   refreshSlotPopout();
   updateCurveVisualization();
 }
@@ -2068,11 +2067,12 @@ function maybeAutoAdvanceMap() {
 }
 
 function handleAutoContinue() {
-  if (!autoContinueEnabled) {
+  if (game.state === 'map_result') {
+    // Campaign progression should flow to the next unlocked map without manual clicks.
+    maybeAutoAdvanceMap();
     return;
   }
-  if (game.state === 'map_result') {
-    maybeAutoAdvanceMap();
+  if (!autoContinueEnabled) {
     return;
   }
   if (['build_phase', 'wave_result'].includes(game.state)) {
@@ -2154,9 +2154,7 @@ btnHideCurvePanel.addEventListener('click', (event) => {
   scheduleProgressPersist();
 });
 
-btnLoadMap.addEventListener('click', loadSelectedMap);
-
-elMapSelect.addEventListener('change', updateMapMeta);
+elMapSelect.addEventListener('change', loadSelectedMap);
 elCurveTower.addEventListener('change', () => {
   selectedCurveTowerId = elCurveTower.value;
   markCurveDirty();
