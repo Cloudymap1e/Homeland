@@ -323,6 +323,22 @@ cd /Users/rc/Project/Homeland
 npm run balance:cuda-check
 ```
 
+Native CUDA wave backend build (GS75):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run build:gpu-wave
+```
+
+GPU-engine sanity run (Map 1 quick suite):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:gpu-check
+```
+
+For direct CLI use, `balance-sim` accepts `--engine=classic|fast|gpu` (default `fast`).
+
 Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.
 
 ## Cloudflare Tunnel Publish

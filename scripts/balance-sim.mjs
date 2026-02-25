@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { HomelandGame } from '../web/src/game-core.js';
 import { FastHomelandGame } from './fast-game-core.mjs';
+import { hasGpuWaveBinary, runGpuWave, gpuWaveBinaryPath } from './gpu-wave-runner.mjs';
 import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG } from '../web/src/config.js';
 
 const DEFAULT_RUNS = 1000;
@@ -264,10 +265,32 @@ function parseArgs(argv) {
       args.skipStandard = true;
     } else if (arg.startsWith('--engine=')) {
       const raw = arg.split('=')[1];
-      args.engine = raw === 'classic' ? 'classic' : 'fast';
+      if (raw === 'classic') {
+        args.engine = 'classic';
+      } else if (raw === 'gpu') {
+        args.engine = 'gpu';
+      } else {
+        args.engine = 'fast';
+      }
     }
   }
   return args;
+}
+
+function createSimulationGame(engine, rand) {
+  if (engine === 'classic') {
+    return new HomelandGame();
+  }
+  if (engine === 'gpu') {
+    if (!hasGpuWaveBinary()) {
+      throw new Error(
+        `GPU engine requested but binary is missing at ${gpuWaveBinaryPath()}. ` +
+        'Run ./scripts/build-gpu-wave-sim.sh on GS75.'
+      );
+    }
+    return new FastHomelandGame({ rand, gpuWaveSim: runGpuWave });
+  }
+  return new FastHomelandGame({ rand });
 }
 
 function parseMapIds(raw) {
@@ -750,10 +773,10 @@ function runCurrentMap(game, rand, mapId, policyId) {
 
 function runSingle(seed, mapId, policyId, options = {}) {
   const rand = createRng(seed);
-  const engine = options.engine === 'classic' ? 'classic' : 'fast';
-  const game = engine === 'classic'
-    ? new HomelandGame()
-    : new FastHomelandGame({ rand });
+  const engine = options.engine === 'classic'
+    ? 'classic'
+    : (options.engine === 'gpu' ? 'gpu' : 'fast');
+  const game = createSimulationGame(engine, rand);
   const carryResources = Boolean(options.carryResources);
   game.setMap(mapId, { ignoreUnlock: true, carryResources });
 
@@ -779,9 +802,7 @@ function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all'
   }
 
   const rand = createRng(seed);
-  const game = engine === 'classic'
-    ? new HomelandGame()
-    : new FastHomelandGame({ rand });
+  const game = createSimulationGame(engine, rand);
   let lastOutcome = null;
   for (let mapIndex = 0; mapIndex < targetIndex; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
@@ -1602,6 +1623,12 @@ function printMapSet(label, byMap, mapIds) {
 }
 
 function configuredWorkers(args, cudaDetected) {
+  if (args.engine === 'gpu') {
+    // GPU wave engine uses one CUDA sidecar per worker; too many workers can thrash a single GPU.
+    const cpuCount = os.cpus()?.length || args.workers;
+    const cap = Math.max(1, Math.min(4, cpuCount));
+    return Math.max(1, Math.min(args.workers, cap));
+  }
   if (cudaDetected) {
     return Math.max(args.workers, Math.min(16, os.cpus()?.length || args.workers));
   }
@@ -1633,6 +1660,15 @@ async function main() {
   console.log(`policy=${policyId}`);
   console.log(`suite=${args.suite}`);
   console.log(`engine=${args.engine}`);
+  if (args.engine === 'gpu') {
+    if (!hasGpuWaveBinary()) {
+      throw new Error(
+        `GPU engine requested but binary is missing at ${gpuWaveBinaryPath()}. ` +
+        'Run ./scripts/build-gpu-wave-sim.sh on GS75.'
+      );
+    }
+    console.log(`gpuWaveBinary=${gpuWaveBinaryPath()}`);
+  }
   if (args.cuda) {
     if (cudaDetected) {
       console.log('CUDA detected: using high-throughput mode with expanded worker parallelism.');

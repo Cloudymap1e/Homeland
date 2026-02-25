@@ -144,6 +144,7 @@ function ensureIntCapacity(arr, minSize) {
 export class FastHomelandGame {
   constructor(options = {}) {
     this.rand = typeof options.rand === 'function' ? options.rand : Math.random;
+    this.gpuWaveSim = typeof options.gpuWaveSim === 'function' ? options.gpuWaveSim : null;
 
     this.mapId = DEFAULT_MAP_ID;
     this.mapConfig = MAPS[this.mapId];
@@ -457,6 +458,146 @@ export class FastHomelandGame {
     };
   }
 
+  applyFireZoneSnapshot(zones) {
+    const safe = Array.isArray(zones) ? zones : [];
+    this.ensureFireCapacity(safe.length);
+    this.fireCount = safe.length;
+    for (let i = 0; i < safe.length; i += 1) {
+      const zone = safe[i];
+      this.fireX[i] = Number(zone.x) || 0;
+      this.fireY[i] = Number(zone.y) || 0;
+      this.fireRadius[i] = Number(zone.radius) || 0;
+      this.fireDps[i] = Number(zone.dps) || 0;
+      this.fireDuration[i] = Math.max(0, Number(zone.duration) || 0);
+    }
+  }
+
+  buildGpuWavePayload(wave) {
+    const routeWeights = wave.routeWeights || this.routeWeights;
+    const enemyQueue = [];
+    for (let i = 0; i < this.spawnQueueLen; i += 1) {
+      const enemyTypeIdx = this.spawnQueue[i];
+      const template = this.getEnemyTemplate(enemyTypeIdx);
+      const chosenRoute = pickWeightedIndex(routeWeights, this.rand);
+      enemyQueue.push({
+        hp: template.hp,
+        speed: template.speed,
+        coinReward: template.coinReward,
+        xpReward: template.xpReward,
+        routeIndex: Math.min(chosenRoute, this.pathInfos.length - 1),
+      });
+    }
+
+    const towers = [];
+    for (let slotIndex = 0; slotIndex < this.buildSlots.length; slotIndex += 1) {
+      const towerType = this.towerTypeBySlot[slotIndex];
+      if (towerType < 0) {
+        continue;
+      }
+      const towerId = TOWER_IDS[towerType];
+      const towerCfg = TOWER_CONFIG[towerId];
+      const level = this.towerLevelBySlot[slotIndex];
+      const levelCfg = towerCfg.levels[Math.max(0, level - 1)] || towerCfg.levels[0];
+
+      towers.push({
+        slotIndex,
+        type: towerType,
+        x: this.slotX[slotIndex],
+        y: this.slotY[slotIndex],
+        cooldown: this.towerCooldownBySlot[slotIndex],
+        range: levelCfg.range || 0,
+        attackSpeed: levelCfg.attackSpeed || 0,
+        damage: levelCfg.damage || 0,
+        splashRadius: levelCfg.splashRadius || 0,
+        splashFalloff: levelCfg.splashFalloff || 0,
+        burnDps: levelCfg.burnDps || 0,
+        burnDuration: levelCfg.burnDuration || 0,
+        fireballRadius: levelCfg.fireballRadius || 0,
+        fireballDps: levelCfg.fireballDps || 0,
+        fireballDuration: levelCfg.fireballDuration || 0,
+        slowPercent: levelCfg.slowPercent || 0,
+        slowDuration: levelCfg.slowDuration || 0,
+        windTargets: levelCfg.windTargets || 1,
+        chainCount: levelCfg.chainCount || 0,
+        chainFalloff: levelCfg.chainFalloff || 0,
+        shockDuration: levelCfg.shockVisualDuration || 0.58,
+      });
+    }
+
+    const fireZones = [];
+    for (let i = 0; i < this.fireCount; i += 1) {
+      fireZones.push({
+        x: this.fireX[i],
+        y: this.fireY[i],
+        radius: this.fireRadius[i],
+        dps: this.fireDps[i],
+        duration: this.fireDuration[i],
+      });
+    }
+
+    return {
+      coins: this.coins,
+      xp: this.xp,
+      leakCoins: this.mapConfig.leakPenalty.coins,
+      leakXp: this.mapConfig.leakPenalty.xp,
+      dt: 0.06 * this.speed,
+      spawnInterval: wave.spawnInterval,
+      routes: this.pathInfos.map((path) => path.points.map((p) => ({ x: p.x, y: p.y }))),
+      enemyQueue,
+      towers,
+      fireZones,
+    };
+  }
+
+  simulateCurrentWaveWithGpu(wave) {
+    if (!this.gpuWaveSim) {
+      return { ok: false, error: 'GPU wave simulator is unavailable.' };
+    }
+
+    try {
+      const payload = this.buildGpuWavePayload(wave);
+      const result = this.gpuWaveSim(payload);
+
+      this.coins = Number(result.coins) || 0;
+      this.xp = Math.max(0, Number(result.xp) || 0);
+      this.stats.spawned += payload.enemyQueue.length;
+      this.stats.killed += Math.max(0, Math.round(Number(result.killed) || 0));
+      this.stats.leaked += Math.max(0, Math.round(Number(result.leaked) || 0));
+
+      if (Array.isArray(result.towerCooldowns)) {
+        for (const item of result.towerCooldowns) {
+          const slotIndex = Number(item.slotIndex);
+          if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= this.buildSlots.length) {
+            continue;
+          }
+          this.towerCooldownBySlot[slotIndex] = Math.max(0, Number(item.cooldown) || 0);
+        }
+      }
+
+      this.applyFireZoneSnapshot(result.fireZones || []);
+
+      this.enemyCount = 0;
+      this.spawnCursor = this.spawnQueueLen;
+      this.lastAttacks = [];
+
+      if (result.defeat || this.coins < 0) {
+        this.state = 'map_result';
+        this.result = {
+          victory: false,
+          mapId: this.mapConfig.mapId,
+          nextMapUnlocked: false,
+        };
+        return { ok: true };
+      }
+
+      this.state = 'wave_running';
+      this.resolveWaveState();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   startNextWave() {
     if (!['build_phase', 'wave_result'].includes(this.state)) {
       return { ok: false, error: 'Cannot start wave in this state.' };
@@ -490,6 +631,14 @@ export class FastHomelandGame {
     this.spawnCursor = 0;
     this.spawnCooldown = 0;
     this.state = 'wave_running';
+
+    if (this.gpuWaveSim) {
+      const gpuResult = this.simulateCurrentWaveWithGpu(wave);
+      if (!gpuResult.ok) {
+        this.gpuWaveSim = null;
+      }
+    }
+
     return { ok: true };
   }
 

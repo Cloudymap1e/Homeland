@@ -12,7 +12,9 @@
     "balance:diversity": "node scripts/balance-sim.mjs --runs=600 --maps=all --workers=auto --skip-search --suite=full --skip-standard --policies=random_all",
     "balance:standard": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --skip-search --suite=criteria --policies=random_all",
     "balance:cuda-check": "node scripts/balance-sim.mjs --runs=400 --maps=all --workers=auto --cuda --suite=quick --policies=random_all",
+    "balance:gpu-check": "node scripts/balance-sim.mjs --runs=100 --maps=map_01_river_bend --workers=2 --cuda-required --suite=quick --skip-search --skip-standard --policies=random_all --engine=gpu",
     "balance:gs75": "node scripts/balance-sim.mjs --runs=1000 --maps=all --workers=auto --cuda-required --suite=full --policies=random_all",
+    "build:gpu-wave": "./scripts/build-gpu-wave-sim.sh",
     "tunnel:quick": "cloudflared tunnel --url http://localhost:4173",
     "tunnel:run": "./scripts/cloudflare-tunnel-run.sh"
   },
