@@ -31,7 +31,6 @@ const btnToggleReportPanel = document.getElementById('toggle-report-panel');
 const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
 const btnHideReportPanel = document.getElementById('hide-report-panel');
 const btnHideCurvePanel = document.getElementById('hide-curve-panel');
-const btnReset = document.getElementById('reset');
 const btnLoadMap = document.getElementById('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
@@ -1970,18 +1969,6 @@ btnHideReportPanel.addEventListener('click', (event) => {
 btnHideCurvePanel.addEventListener('click', (event) => {
   event.stopPropagation();
   setPanelVisibility('curve', false);
-  scheduleProgressPersist();
-});
-
-btnReset.addEventListener('click', () => {
-  game.reset();
-  selectedSlotId = null;
-  slotPopoutNotice = '';
-  closeSlotPopout();
-  visualEffects.length = 0;
-  fastForwardUntilMs = 0;
-  buildStaticMapLayers();
-  updateHud();
   scheduleProgressPersist();
 });
 
