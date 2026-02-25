@@ -110,7 +110,8 @@ Use a data-driven architecture so balancing and content expansion are easy.
 
 ## Monte Carlo Balancing (GS75 CUDA-First Rule)
 
-- When running balancing simulations on machine `GS75`, always try CUDA acceleration first.
+- When running any Monte Carlo balancing simulation on machine `GS75`, CUDA must be prioritized first.
+- On `GS75`, do not run CPU Monte Carlo first when CUDA is available.
 - Required first attempt on GS75:
   - `cd /Users/rc/Project/Homeland`
   - `npm run balance:gs75`
