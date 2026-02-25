@@ -103,10 +103,43 @@ Use a data-driven architecture so balancing and content expansion are easy.
 ## Runtime Stack
 
 - Primary implementation stack: JavaScript/TypeScript-oriented web runtime.
-- Main playable prototype location: `/Users/rc/Project/Homeland/web`.
+- Main playable prototype location: `web/` at the repo root (paths in docs may reference `/Users/rc/Project/Homeland`; in a worktree, use the current repo root).
 - Dev server command: `npm run dev` (serves `web/` on `http://127.0.0.1:4173`).
 - Test command: `npm test`.
 - Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
+
+## Repository Layout (Current)
+
+- `web/index.html`, `web/styles.css`: UI shell and styling.
+- `web/src/app.js`: UI/controller, rendering, input handling, persistence client, and main game loop.
+- `web/src/game-core.js`: deterministic game simulation (state machine, wave/placement/combat/effects).
+- `web/src/config.js`: all balance/content data (maps, routes, towers, enemies, campaign criteria).
+- `web/tests/*.test.mjs`: unit tests for JS game logic.
+- `web/tests/*.e2e.spec.mjs`: Playwright-driven UI smoke tests.
+- `scripts/dev-server.mjs`: static web server + `/api/progress` persistence API.
+- `scripts/balance-sim.mjs`: Monte Carlo suite runner (multi-worker, fast engine, GPU optional).
+- `scripts/fast-game-core.mjs`: optimized simulation engine for Monte Carlo.
+- `scripts/gpu-wave-runner.mjs`, `scripts/cuda/wave_sim.cu`, `scripts/build-gpu-wave-sim.sh`: CUDA wave backend.
+- `src/homeland/*`: legacy Python reference prototype + data files (do not treat as active runtime).
+- `tests/*`: legacy Python tests (run with `pytest`).
+
+## Web Runtime Architecture (Current)
+
+- **Data config lives in `web/src/config.js`:** owns map layouts, build slots, routes, wave plans, tower curves, enemy stats, campaign unlock criteria; balance work should update config data first, not logic in `game-core.js`.
+- **Simulation lives in `web/src/game-core.js`:** `HomelandGame` is the state machine with `build_phase`, `wave_running`, `wave_result`, `map_result`, and handles slot activation, placement validation, tower upgrades, wave spawning, targeting, damage, AOE, DOT zones, and leak penalties; it also exposes `exportState()` and helpers used by UI + sim tools.
+- **UI/controller lives in `web/src/app.js`:** owns render loop (canvas + overlays), player input, and UI panels (report/curve panels), calls into `HomelandGame` for progression and uses `getEnemyPosition()` for rendering, triggers persistence saves and refreshes campaign map availability.
+
+## Progress Persistence (Current)
+
+- **Client persistence:** primary is `/api/progress` (JSON) on the dev server, fallback is `localStorage` key `homeland_progress_v1` if server is unavailable.
+- **Server persistence (`scripts/dev-server.mjs`):** stores sessions in `.data/player-progress.json`, session identity uses `homeland_sid` cookie with IP fallback, API supports `GET/PUT/POST/DELETE` for progress JSON.
+
+## Monte Carlo + GPU Balance Pipeline (Current)
+
+- `scripts/balance-sim.mjs` runs the full suite (search, retention baselines, pass-standard, diversity, OAT).
+- Uses worker threads and the optimized `FastHomelandGame` engine by default.
+- GPU wave engine is optional and built via `npm run build:gpu-wave`.
+- `balance:gs75` uses `--cuda-required` and must run on GS75 first per the CUDA-first rule.
 
 ## Monte Carlo Balancing (GS75 CUDA-First Rule)
 
