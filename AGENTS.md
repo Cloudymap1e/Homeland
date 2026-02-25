@@ -112,6 +112,8 @@ Use a data-driven architecture so balancing and content expansion are easy.
 
 - When running any Monte Carlo balancing simulation on machine `GS75`, CUDA must be prioritized first.
 - On `GS75`, do not run CPU Monte Carlo first when CUDA is available.
+- If current host is not `GS75`, run Monte Carlo on `GS75` remotely via SSH first (for example `ssh GS75 'cd /Users/rc/Project/Homeland && npm run balance:gs75'`).
+- Local CPU Monte Carlo on non-`GS75` hosts is fallback-only and must be used only when `GS75` execution is unavailable.
 - Required first attempt on GS75:
   - `cd /Users/rc/Project/Homeland`
   - `npm run balance:gs75`
