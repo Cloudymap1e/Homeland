@@ -1091,6 +1091,107 @@ function isCudaAvailable() {
   }
 }
 
+const WORKER_POOL_BY_SIZE = new Map();
+
+class WorkerPool {
+  constructor(size) {
+    this.size = Math.max(1, size);
+    this.workers = [];
+    this.idle = [];
+    this.pendingByTaskId = new Map();
+    this.nextTaskId = 1;
+    this.closed = false;
+
+    for (let i = 0; i < this.size; i += 1) {
+      const worker = new Worker(new URL(import.meta.url), {
+        workerData: { mode: 'pool' },
+      });
+      this.workers.push(worker);
+      this.idle.push(i);
+      worker.on('message', (message) => this.onMessage(i, message));
+      worker.on('error', (error) => this.onWorkerFailure(error));
+      worker.on('exit', (code) => {
+        if (code !== 0 && !this.closed) {
+          this.onWorkerFailure(new Error(`Worker pool thread exited with code ${code}`));
+        }
+      });
+    }
+  }
+
+  onMessage(workerIndex, message) {
+    const { taskId, result, error } = message || {};
+    if (!Number.isInteger(taskId)) {
+      return;
+    }
+    const pending = this.pendingByTaskId.get(taskId);
+    if (!pending) {
+      return;
+    }
+    this.pendingByTaskId.delete(taskId);
+    this.idle.push(workerIndex);
+    if (error) {
+      pending.reject(new Error(error));
+    } else {
+      pending.resolve(result);
+    }
+  }
+
+  onWorkerFailure(error) {
+    for (const pending of this.pendingByTaskId.values()) {
+      pending.reject(error);
+    }
+    this.pendingByTaskId.clear();
+  }
+
+  runTask(task) {
+    if (this.closed) {
+      return Promise.reject(new Error('Worker pool is closed.'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const attemptDispatch = () => {
+        if (this.idle.length === 0) {
+          setImmediate(attemptDispatch);
+          return;
+        }
+        const workerIndex = this.idle.pop();
+        const worker = this.workers[workerIndex];
+        const taskId = this.nextTaskId;
+        this.nextTaskId += 1;
+        this.pendingByTaskId.set(taskId, { resolve, reject });
+        worker.postMessage({ taskId, task });
+      };
+      attemptDispatch();
+    });
+  }
+
+  async runTasks(tasks) {
+    return Promise.all(tasks.map((task) => this.runTask(task)));
+  }
+
+  async close() {
+    this.closed = true;
+    const terminations = this.workers.map((worker) => worker.terminate());
+    await Promise.allSettled(terminations);
+  }
+}
+
+function getWorkerPool(size) {
+  const key = Math.max(1, size);
+  let pool = WORKER_POOL_BY_SIZE.get(key);
+  if (!pool) {
+    pool = new WorkerPool(key);
+    WORKER_POOL_BY_SIZE.set(key, pool);
+  }
+  return pool;
+}
+
+async function shutdownWorkerPools() {
+  const pools = Array.from(WORKER_POOL_BY_SIZE.values());
+  WORKER_POOL_BY_SIZE.clear();
+  await Promise.all(pools.map((pool) => pool.close()));
+}
+
 async function runManyParallel({
   mapId,
   runs,
@@ -1111,38 +1212,25 @@ async function runManyParallel({
   const remainder = runs % workerCount;
   let cursor = seedStart;
 
-  const jobs = [];
+  const tasks = [];
   for (let i = 0; i < workerCount; i += 1) {
     const count = base + (i < remainder ? 1 : 0);
-    jobs.push(
-      new Promise((resolve, reject) => {
-        const worker = new Worker(new URL(import.meta.url), {
-          workerData: {
-            mode: 'batch',
-            mapId,
-            runs: count,
-            seedStart: cursor,
-            multipliers,
-            policyId,
-            engine,
-            startingCoinsOverride,
-            startingXpOverride,
-          },
-        });
-        cursor += count;
-
-        worker.on('message', (result) => resolve(result));
-        worker.on('error', reject);
-        worker.on('exit', (code) => {
-          if (code !== 0) {
-            reject(new Error(`Worker exited with code ${code}`));
-          }
-        });
-      })
-    );
+    tasks.push({
+      mode: 'batch',
+      mapId,
+      runs: count,
+      seedStart: cursor,
+      multipliers,
+      policyId,
+      engine,
+      startingCoinsOverride,
+      startingXpOverride,
+    });
+    cursor += count;
   }
 
-  const parts = await Promise.all(jobs);
+  const pool = getWorkerPool(workerCount);
+  const parts = await pool.runTasks(tasks);
   let merged = emptyAggregate();
   for (const part of parts) {
     merged = mergeAggregate(merged, part);
@@ -1168,36 +1256,23 @@ async function runRetentionParallel({
   const remainder = runs % workerCount;
   let cursor = seedStart;
 
-  const jobs = [];
+  const tasks = [];
   for (let i = 0; i < workerCount; i += 1) {
     const count = base + (i < remainder ? 1 : 0);
-    jobs.push(
-      new Promise((resolve, reject) => {
-        const worker = new Worker(new URL(import.meta.url), {
-          workerData: {
-            mode: 'retention_batch',
-            targetMapId,
-            runs: count,
-            seedStart: cursor,
-            multipliers,
-            policyId,
-            engine,
-          },
-        });
-        cursor += count;
-
-        worker.on('message', (result) => resolve(result));
-        worker.on('error', reject);
-        worker.on('exit', (code) => {
-          if (code !== 0) {
-            reject(new Error(`Worker exited with code ${code}`));
-          }
-        });
-      })
-    );
+    tasks.push({
+      mode: 'retention_batch',
+      targetMapId,
+      runs: count,
+      seedStart: cursor,
+      multipliers,
+      policyId,
+      engine,
+    });
+    cursor += count;
   }
 
-  const parts = await Promise.all(jobs);
+  const pool = getWorkerPool(workerCount);
+  const parts = await pool.runTasks(tasks);
   let merged = emptyRetentionAggregate();
   for (const part of parts) {
     merged = mergeRetentionAggregate(merged, part);
@@ -1754,17 +1829,16 @@ async function main() {
   restoreTunables(snapshot);
 }
 
-function runWorkerBatch() {
-  const {
-    mapId,
-    runs,
-    seedStart,
-    multipliers,
-    policyId,
-    engine,
-    startingCoinsOverride,
-    startingXpOverride,
-  } = workerData;
+function executeBatchTask({
+  mapId,
+  runs,
+  seedStart,
+  multipliers,
+  policyId,
+  engine,
+  startingCoinsOverride,
+  startingXpOverride,
+}) {
   const target = targetForMap(mapId);
   const snapshot = snapshotTunables();
   applyMultipliers(multipliers);
@@ -1800,11 +1874,21 @@ function runWorkerBatch() {
     }
   }
   restoreTunables(snapshot);
-  parentPort.postMessage(agg);
+  return agg;
 }
 
-function runRetentionWorkerBatch() {
-  const { targetMapId, runs, seedStart, multipliers, policyId, engine } = workerData;
+function runWorkerBatch() {
+  parentPort.postMessage(executeBatchTask(workerData));
+}
+
+function executeRetentionTask({
+  targetMapId,
+  runs,
+  seedStart,
+  multipliers,
+  policyId,
+  engine,
+}) {
   const snapshot = snapshotTunables();
   applyMultipliers(multipliers);
 
@@ -1823,16 +1907,52 @@ function runRetentionWorkerBatch() {
   }
 
   restoreTunables(snapshot);
-  parentPort.postMessage(agg);
+  return agg;
+}
+
+function runRetentionWorkerBatch() {
+  parentPort.postMessage(executeRetentionTask(workerData));
+}
+
+function runPoolWorker() {
+  parentPort.on('message', (message) => {
+    const { taskId, task } = message || {};
+    if (!Number.isInteger(taskId) || !task || typeof task !== 'object') {
+      return;
+    }
+
+    try {
+      let result = null;
+      if (task.mode === 'batch') {
+        result = executeBatchTask(task);
+      } else if (task.mode === 'retention_batch') {
+        result = executeRetentionTask(task);
+      } else {
+        throw new Error(`Unknown pool task mode: ${task.mode}`);
+      }
+      parentPort.postMessage({ taskId, result });
+    } catch (error) {
+      parentPort.postMessage({
+        taskId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 }
 
 if (isMainThread) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await shutdownWorkerPools();
+    });
 } else if (workerData?.mode === 'batch') {
   runWorkerBatch();
 } else if (workerData?.mode === 'retention_batch') {
   runRetentionWorkerBatch();
+} else if (workerData?.mode === 'pool') {
+  runPoolWorker();
 }
