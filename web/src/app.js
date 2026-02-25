@@ -1,5 +1,11 @@
 import { HomelandGame, getEnemyPosition } from './game-core.js';
-import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, CAMPAIGN_INFO } from './config.js';
+import {
+  MAPS,
+  DEFAULT_MAP_ID,
+  TOWER_CONFIG,
+  CAMPAIGN_INFO,
+  CAMPAIGN_PASS_CRITERIA,
+} from './config.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -515,17 +521,36 @@ function rebuildMapSelect() {
 
 function updateMapMeta() {
   const map = game.mapConfig;
+  const mapIndex = Math.max(0, Object.keys(MAPS).indexOf(map.mapId));
+  const passCriteria = map.passCriteria || {
+    unlockRunsTarget:
+      CAMPAIGN_PASS_CRITERIA.unlockRunsByMapIndex[
+        Math.min(mapIndex, CAMPAIGN_PASS_CRITERIA.unlockRunsByMapIndex.length - 1)
+      ],
+    failRunPenaltyEquivalent: CAMPAIGN_PASS_CRITERIA.failRunPenaltyEquivalent,
+    retentionProbeRuns: CAMPAIGN_PASS_CRITERIA.retentionProbeRuns,
+    passRateProbeRuns: CAMPAIGN_PASS_CRITERIA.passRateProbeRuns,
+    mcPassRateTarget:
+      CAMPAIGN_PASS_CRITERIA.mcPassRateByMapIndex[
+        Math.min(mapIndex, CAMPAIGN_PASS_CRITERIA.mcPassRateByMapIndex.length - 1)
+      ],
+  };
   const unlockText = map.unlockRequirement?.nextMap
     ? `Unlock XP: ${map.unlockRequirement.minXp}`
     : 'Final map';
   const slotFee = Number(map.slotActivationCost) || 0;
   const clearReward = Number(map.mapClearReward?.coins) || 0;
+  const passRateTarget = Number(passCriteria.mcPassRateTarget) || 0;
+  const passRateTargetPct = Math.round(passRateTarget * 100);
   elMapMeta.textContent = [
     `Routes: ${map.routes.length}`,
     `Waves: ${map.waves.length}`,
     `Fleet: ${map.fleetTarget}+ boats`,
     `Slot unlock: ${formatNumber(slotFee)}c`,
     `Clear reward: +${formatNumber(clearReward)}c`,
+    `Pass standard: ${formatNumber(passCriteria.unlockRunsTarget)} runs @ ${passRateTargetPct}% MC`,
+    `Fail penalty: ~${passCriteria.failRunPenaltyEquivalent} run XP`,
+    `MC probes: ${passCriteria.retentionProbeRuns}/${passCriteria.passRateProbeRuns}`,
     unlockText,
     `Tower cap: ${CAMPAIGN_INFO.maxTowerLevel}`,
   ].join(' | ');

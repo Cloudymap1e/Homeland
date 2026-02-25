@@ -7,11 +7,18 @@ import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG } from '../web/src/config.js';
 const DEFAULT_RUNS = 1000;
 const DEFAULT_WORKERS = Math.max(1, Math.min(8, (os.cpus()?.length || 4) - 1));
 const SEARCH_FRACTION = 0.2;
+const DEFAULT_RETENTION_RUNS = 100;
+const DEFAULT_STANDARD_RUNS = 1000;
 
 const TOWER_IDS = ['arrow', 'bone', 'magic_fire', 'magic_wind', 'magic_lightning'];
 const MONO_POLICIES = ['mono_arrow', 'mono_bomb', 'mono_fire', 'mono_wind', 'mono_lightning'];
+const MAP_ORDER = Object.keys(MAPS);
+const MAP_INDEX = new Map(MAP_ORDER.map((mapId, index) => [mapId, index]));
+const FAIL_RUN_PENALTY_EQUIVALENT = 2;
+const RUN_TARGETS_BY_MAP_INDEX = [30, 50, 60, 90, 100, 120];
+const PASS_RATE_TARGETS_BY_MAP_INDEX = [0.9, 0.85, 0.8, 0.77, 0.75, 0.7];
 
-const TARGETS = {
+const BASE_TARGETS = {
   map_01_river_bend: {
     clearMin: 0.84,
     clearMax: 0.94,
@@ -214,6 +221,10 @@ function parseArgs(argv) {
     diversityRuns: null,
     oatRuns: null,
     policies: 'random_all',
+    retentionRuns: DEFAULT_RETENTION_RUNS,
+    standardRuns: DEFAULT_STANDARD_RUNS,
+    retentionPolicy: 'random_all',
+    skipStandard: false,
   };
 
   for (const arg of argv) {
@@ -241,6 +252,14 @@ function parseArgs(argv) {
       args.oatRuns = Math.max(20, Number(arg.split('=')[1]));
     } else if (arg.startsWith('--policies=')) {
       args.policies = arg.split('=')[1];
+    } else if (arg.startsWith('--retention-runs=')) {
+      args.retentionRuns = Math.max(20, Number(arg.split('=')[1]));
+    } else if (arg.startsWith('--standard-runs=')) {
+      args.standardRuns = Math.max(20, Number(arg.split('=')[1]));
+    } else if (arg.startsWith('--retention-policy=')) {
+      args.retentionPolicy = arg.split('=')[1];
+    } else if (arg === '--skip-standard') {
+      args.skipStandard = true;
     }
   }
   return args;
@@ -248,7 +267,7 @@ function parseArgs(argv) {
 
 function parseMapIds(raw) {
   if (raw === 'all') {
-    return Object.keys(MAPS);
+    return MAP_ORDER;
   }
   const requested = raw.split(',').map((id) => id.trim()).filter(Boolean);
   if (!requested.length) {
@@ -270,6 +289,58 @@ function parsePolicyIds(raw) {
 
 function getPolicy(policyId) {
   return POLICIES[policyId] || POLICIES.random_all;
+}
+
+function runTargetForMap(mapId) {
+  const index = MAP_INDEX.get(mapId);
+  if (!Number.isInteger(index) || index < 0) {
+    return RUN_TARGETS_BY_MAP_INDEX[0];
+  }
+  if (index < RUN_TARGETS_BY_MAP_INDEX.length) {
+    return RUN_TARGETS_BY_MAP_INDEX[index];
+  }
+  const lastTarget = RUN_TARGETS_BY_MAP_INDEX[RUN_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = RUN_TARGETS_BY_MAP_INDEX[RUN_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const growthStep = Math.max(10, lastTarget - previousTarget);
+  return lastTarget + growthStep * (index - RUN_TARGETS_BY_MAP_INDEX.length + 1);
+}
+
+function passRateTargetForMap(mapId) {
+  const index = MAP_INDEX.get(mapId);
+  if (!Number.isInteger(index) || index < 0) {
+    return PASS_RATE_TARGETS_BY_MAP_INDEX[0];
+  }
+  if (index < PASS_RATE_TARGETS_BY_MAP_INDEX.length) {
+    return PASS_RATE_TARGETS_BY_MAP_INDEX[index];
+  }
+  const lastTarget = PASS_RATE_TARGETS_BY_MAP_INDEX[PASS_RATE_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = PASS_RATE_TARGETS_BY_MAP_INDEX[PASS_RATE_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const reductionStep = Math.max(0.02, previousTarget - lastTarget);
+  const extended = lastTarget - reductionStep * (index - PASS_RATE_TARGETS_BY_MAP_INDEX.length + 1);
+  return Math.max(0.5, Number(extended.toFixed(2)));
+}
+
+function targetForMap(mapId) {
+  if (BASE_TARGETS[mapId]) {
+    return BASE_TARGETS[mapId];
+  }
+
+  const clearCenter = passRateTargetForMap(mapId);
+  const qualityCenter = Math.max(0.24, clearCenter - 0.2);
+  const mapIndex = MAP_INDEX.get(mapId);
+  const leaksCenter = 4 + Math.max(0, Number.isInteger(mapIndex) ? mapIndex : MAP_ORDER.length) * 5;
+  return {
+    clearMin: Math.max(0.45, clearCenter - 0.05),
+    clearMax: Math.min(0.98, clearCenter + 0.05),
+    clearCenter,
+    qualityMin: Math.max(0.16, qualityCenter - 0.12),
+    qualityMax: Math.min(0.95, qualityCenter + 0.12),
+    qualityCenter,
+    leaksMin: Math.max(1, leaksCenter - 9),
+    leaksMax: leaksCenter + 11,
+    leaksCenter,
+    qualityLeakCap: leaksCenter + 13,
+  };
 }
 
 function createRng(seed) {
@@ -642,11 +713,8 @@ function captureTowerLayout(game) {
   return { counts, levelSums };
 }
 
-function runSingle(seed, mapId, policyId) {
-  const rand = createRng(seed);
+function runCurrentMap(game, rand, mapId, policyId) {
   const policy = getPolicy(policyId);
-  const game = new HomelandGame();
-  game.setMap(mapId, { ignoreUnlock: true, carryResources: false });
   let guard = 0;
 
   while (game.state !== 'map_result' && guard < 500000) {
@@ -672,6 +740,78 @@ function runSingle(seed, mapId, policyId) {
     xp: snap.xp,
     towerCounts: layout.counts,
     towerLevelSums: layout.levelSums,
+  };
+}
+
+function runSingle(seed, mapId, policyId, options = {}) {
+  const rand = createRng(seed);
+  const game = new HomelandGame();
+  const carryResources = Boolean(options.carryResources);
+  game.setMap(mapId, { ignoreUnlock: true, carryResources });
+
+  if (Number.isFinite(options.startingCoinsOverride)) {
+    game.coins = Math.max(0, Math.round(options.startingCoinsOverride));
+  }
+  if (Number.isFinite(options.startingXpOverride)) {
+    game.xp = Math.max(0, Math.round(options.startingXpOverride));
+  }
+
+  return runCurrentMap(game, rand, mapId, policyId);
+}
+
+function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all') {
+  const targetIndex = MAP_INDEX.get(targetMapId);
+  if (!Number.isInteger(targetIndex) || targetIndex < 0) {
+    return {
+      reachedTarget: false,
+      failedMapId: targetMapId,
+      retainedCoins: 0,
+      retainedXp: 0,
+    };
+  }
+
+  const rand = createRng(seed);
+  const game = new HomelandGame();
+  for (let mapIndex = 0; mapIndex < targetIndex; mapIndex += 1) {
+    const mapId = MAP_ORDER[mapIndex];
+    const switched = game.setMap(mapId, { ignoreUnlock: true, carryResources: mapIndex > 0 });
+    if (!switched.ok) {
+      return {
+        reachedTarget: false,
+        failedMapId: mapId,
+        retainedCoins: game.coins,
+        retainedXp: game.xp,
+      };
+    }
+
+    const outcome = runCurrentMap(game, rand, mapId, policyId);
+    if (!outcome.victory) {
+      return {
+        reachedTarget: false,
+        failedMapId: mapId,
+        retainedCoins: outcome.coins,
+        retainedXp: outcome.xp,
+      };
+    }
+  }
+
+  const switchedToTarget = game.setMap(targetMapId, {
+    ignoreUnlock: true,
+    carryResources: targetIndex > 0,
+  });
+  if (!switchedToTarget.ok) {
+    return {
+      reachedTarget: false,
+      failedMapId: targetMapId,
+      retainedCoins: game.coins,
+      retainedXp: game.xp,
+    };
+  }
+  return {
+    reachedTarget: true,
+    failedMapId: null,
+    retainedCoins: game.coins,
+    retainedXp: game.xp,
   };
 }
 
@@ -701,6 +841,24 @@ function emptyAggregate() {
   };
 }
 
+function emptyRetentionAggregate() {
+  return {
+    attempts: 0,
+    reachedTarget: 0,
+    retainedCoinsSum: 0,
+    retainedXpSum: 0,
+    blockedByMap: {},
+  };
+}
+
+function mergeBlockedByMap(a, b) {
+  const merged = { ...a };
+  for (const [mapId, count] of Object.entries(b)) {
+    merged[mapId] = (merged[mapId] || 0) + count;
+  }
+  return merged;
+}
+
 function mergeTowerObjects(a, b) {
   const merged = {};
   for (const id of TOWER_IDS) {
@@ -724,6 +882,16 @@ function mergeAggregate(a, b) {
     lossCount: a.lossCount + b.lossCount,
     towerBuiltTotals: mergeTowerObjects(a.towerBuiltTotals, b.towerBuiltTotals),
     towerLevelTotals: mergeTowerObjects(a.towerLevelTotals, b.towerLevelTotals),
+  };
+}
+
+function mergeRetentionAggregate(a, b) {
+  return {
+    attempts: a.attempts + b.attempts,
+    reachedTarget: a.reachedTarget + b.reachedTarget,
+    retainedCoinsSum: a.retainedCoinsSum + b.retainedCoinsSum,
+    retainedXpSum: a.retainedXpSum + b.retainedXpSum,
+    blockedByMap: mergeBlockedByMap(a.blockedByMap, b.blockedByMap),
   };
 }
 
@@ -777,6 +945,18 @@ function finalizeAggregate(agg) {
     avgTowerLevel,
     diversityEntropy: diversity.entropy,
     topTowerShare: diversity.topTowerShare,
+  };
+}
+
+function finalizeRetentionAggregate(agg) {
+  const reached = agg.reachedTarget;
+  return {
+    attempts: agg.attempts,
+    reachedTarget: reached,
+    reachRate: agg.attempts ? reached / agg.attempts : 0,
+    avgRetainedCoins: reached ? agg.retainedCoinsSum / reached : 0,
+    avgRetainedXp: reached ? agg.retainedXpSum / reached : 0,
+    blockedByMap: agg.blockedByMap,
   };
 }
 
@@ -846,7 +1026,7 @@ function mapScore(summary, target) {
 
 function scoreCandidate(byMap, multipliers, mapIds) {
   const baseScore = mapIds.reduce((sum, mapId) => {
-    return sum + mapScore(byMap[mapId], TARGETS[mapId]);
+    return sum + mapScore(byMap[mapId], targetForMap(mapId));
   }, 0) / mapIds.length;
 
   const changePenalty =
@@ -869,7 +1049,7 @@ function inTarget(summary, target) {
 
 function scoreInBand(byMap, multipliers, mapIds) {
   const centerScore = mapIds.reduce((sum, mapId) => {
-    const target = TARGETS[mapId];
+    const target = targetForMap(mapId);
     const summary = byMap[mapId];
     return (
       sum +
@@ -1017,7 +1197,7 @@ async function runSearch({ mapIds, searchRuns, workers, policyId }) {
           best = entry;
         }
 
-        const inBand = mapIds.every((mapId) => inTarget(byMap[mapId], TARGETS[mapId]));
+        const inBand = mapIds.every((mapId) => inTarget(byMap[mapId], targetForMap(mapId)));
         if (inBand) {
           const bandScore = scoreInBand(byMap, multipliers, mapIds);
           if (!bestInBand || bandScore < bestInBand.score) {
@@ -1310,14 +1490,25 @@ async function main() {
 }
 
 function runWorkerBatch() {
-  const { mapId, runs, seedStart, multipliers, policyId } = workerData;
-  const target = TARGETS[mapId] || TARGETS[DEFAULT_MAP_ID];
+  const {
+    mapId,
+    runs,
+    seedStart,
+    multipliers,
+    policyId,
+    startingCoinsOverride,
+    startingXpOverride,
+  } = workerData;
+  const target = targetForMap(mapId);
   const snapshot = snapshotTunables();
   applyMultipliers(multipliers);
 
   let agg = emptyAggregate();
   for (let i = 0; i < runs; i += 1) {
-    const result = runSingle(seedStart + i, mapId, policyId);
+    const result = runSingle(seedStart + i, mapId, policyId, {
+      startingCoinsOverride,
+      startingXpOverride,
+    });
     agg.runs += 1;
     agg.wins += result.victory ? 1 : 0;
     agg.leaksSum += result.leaked;
