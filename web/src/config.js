@@ -1,13 +1,9 @@
 const MAX_TOWER_LEVEL = 50;
 const ANCHOR_LEVELS = [1, 10, 20, 30, 40, 50];
 const TOWER_RANGE_SCALE = 0.55;
+const TOWER_DAMAGE_SCALE = 1.45;
+const TOWER_ATTACK_SPEED_SCALE = 1.16;
 const SLOT_DENSITY_FACTOR = 2;
-const DENSIFY_OFFSETS = [
-  { x: 0.02, y: -0.016 },
-  { x: -0.02, y: 0.016 },
-  { x: 0.018, y: 0.018 },
-  { x: -0.018, y: -0.018 },
-];
 
 function roundTo(value, digits = 2) {
   return Number(value.toFixed(digits));
@@ -46,30 +42,63 @@ function scaledRangeFromAnchors(level, anchors) {
   return roundTo(interpolateAnchors(level, anchors) * TOWER_RANGE_SCALE, 2);
 }
 
+function scaleDamage(value) {
+  return Math.max(1, Math.round(value * TOWER_DAMAGE_SCALE));
+}
+
+function scaleRate(value) {
+  return roundTo(value * TOWER_ATTACK_SPEED_SCALE, 2);
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
 function densifyBuildSlots(baseSlots, factor = SLOT_DENSITY_FACTOR) {
-  const copiesPerSlot = Math.max(1, Math.round(factor)) - 1;
-  if (copiesPerSlot <= 0) {
+  const targetCount = Math.max(baseSlots.length, Math.round(baseSlots.length * factor));
+  if (targetCount <= baseSlots.length || baseSlots.length < 2) {
     return baseSlots.slice();
   }
 
-  const out = [];
   const edgePad = 0.02;
-  for (let i = 0; i < baseSlots.length; i += 1) {
-    const slot = baseSlots[i];
-    out.push({ ...slot });
-    for (let copy = 0; copy < copiesPerSlot; copy += 1) {
-      const offset = DENSIFY_OFFSETS[(i + copy) % DENSIFY_OFFSETS.length];
-      const tweak = 1 + ((i + copy) % 3) * 0.08;
-      out.push({
-        id: `${slot.id}_d${copy + 1}`,
-        x: roundTo(clamp(slot.x + offset.x * tweak, edgePad, 1 - edgePad), 3),
-        y: roundTo(clamp(slot.y + offset.y * tweak, edgePad, 1 - edgePad), 3),
-      });
-    }
+  const out = baseSlots.map((slot) => ({ ...slot }));
+  const segments = [];
+  for (let i = 0; i < baseSlots.length - 1; i += 1) {
+    const a = baseSlots[i];
+    const b = baseSlots[i + 1];
+    const len = Math.hypot(a.x - b.x, a.y - b.y);
+    segments.push({ a, b, len, index: i });
+  }
+  segments.sort((left, right) => right.len - left.len);
+  if (!segments.length) {
+    return out;
+  }
+
+  let extraIndex = 1;
+  let cursor = 0;
+  while (out.length < targetCount) {
+    const segment = segments[cursor % segments.length];
+    const phase = Math.floor(cursor / segments.length);
+    const t = phase % 2 === 0 ? 0.5 : (phase % 4 < 2 ? 0.36 : 0.64);
+    const midX = segment.a.x + (segment.b.x - segment.a.x) * t;
+    const midY = segment.a.y + (segment.b.y - segment.a.y) * t;
+    const vx = segment.b.x - segment.a.x;
+    const vy = segment.b.y - segment.a.y;
+    const vLen = Math.hypot(vx, vy) || 1;
+    const nx = -vy / vLen;
+    const ny = vx / vLen;
+    const centerDot = nx * (midX - 0.5) + ny * (midY - 0.5);
+    const sign = centerDot >= 0 ? 1 : -1;
+    const push = phase === 0 ? 0.024 : 0.017;
+    const x = roundTo(clamp(midX + nx * push * sign, edgePad, 1 - edgePad), 3);
+    const y = roundTo(clamp(midY + ny * push * sign, edgePad, 1 - edgePad), 3);
+    out.push({
+      id: `d${segment.index + 1}_${extraIndex}`,
+      x,
+      y,
+    });
+    extraIndex += 1;
+    cursor += 1;
   }
   return out;
 }
@@ -84,9 +113,9 @@ function createArrowLevels() {
     levels.push({
       level,
       cost: costFromAnchors(level, [460, 820, 1550, 2750, 4600, 7400]),
-      damage: intFromAnchors(level, [40, 110, 206, 318, 455, 620]),
+      damage: scaleDamage(intFromAnchors(level, [40, 110, 206, 318, 455, 620])),
       range: scaledRangeFromAnchors(level, [2.86, 3.06, 3.26, 3.46, 3.64, 3.82]),
-      attackSpeed: floatFromAnchors(level, [1.14, 1.5, 1.84, 2.18, 2.46, 2.8]),
+      attackSpeed: scaleRate(floatFromAnchors(level, [1.14, 1.5, 1.84, 2.18, 2.46, 2.8])),
     });
   }
   return levels;
@@ -98,9 +127,9 @@ function createBombLevels() {
     levels.push({
       level,
       cost: costFromAnchors(level, [780, 1560, 2940, 5300, 9200, 15600]),
-      damage: intFromAnchors(level, [112, 198, 324, 486, 682, 890]),
+      damage: scaleDamage(intFromAnchors(level, [112, 198, 324, 486, 682, 890])),
       range: scaledRangeFromAnchors(level, [2.6, 2.75, 2.9, 3.05, 3.2, 3.35]),
-      attackSpeed: floatFromAnchors(level, [0.5, 0.61, 0.72, 0.85, 0.98, 1.1]),
+      attackSpeed: scaleRate(floatFromAnchors(level, [0.5, 0.61, 0.72, 0.85, 0.98, 1.1])),
       splashRadius: floatFromAnchors(level, [1.34, 1.52, 1.74, 1.96, 2.18, 2.4]),
       splashFalloff: intFromAnchors(level, [46, 45, 43, 41, 39, 36]),
     });
@@ -114,13 +143,13 @@ function createFireLevels() {
     levels.push({
       level,
       cost: costFromAnchors(level, [900, 2260, 4400, 8200, 14200, 23800]),
-      damage: intFromAnchors(level, [42, 56, 82, 116, 156, 206]),
+      damage: scaleDamage(intFromAnchors(level, [42, 56, 82, 116, 156, 206])),
       range: scaledRangeFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
-      attackSpeed: floatFromAnchors(level, [0.68, 0.81, 0.93, 1.04, 1.15, 1.26]),
-      fireballDps: intFromAnchors(level, [40, 56, 84, 118, 162, 214]),
+      attackSpeed: scaleRate(floatFromAnchors(level, [0.68, 0.81, 0.93, 1.04, 1.15, 1.26])),
+      fireballDps: scaleDamage(intFromAnchors(level, [40, 56, 84, 118, 162, 214])),
       fireballDuration: 3.0,
       fireballRadius: floatFromAnchors(level, [0.7, 0.78, 0.86, 0.94, 1.03, 1.12]),
-      burnDps: intFromAnchors(level, [18, 27, 40, 56, 77, 102]),
+      burnDps: scaleDamage(intFromAnchors(level, [18, 27, 40, 56, 77, 102])),
       burnDuration: floatFromAnchors(level, [2.5, 2.7, 2.95, 3.2, 3.45, 3.75]),
     });
   }
@@ -143,9 +172,9 @@ function createWindLevels() {
     levels.push({
       level,
       cost: costFromAnchors(level, [820, 1560, 2920, 5300, 9300, 15600]),
-      damage: intFromAnchors(level, [17, 62, 124, 194, 278, 374]),
+      damage: scaleDamage(intFromAnchors(level, [17, 62, 124, 194, 278, 374])),
       range: scaledRangeFromAnchors(level, [3.05, 3.28, 3.5, 3.72, 3.94, 4.14]),
-      attackSpeed: floatFromAnchors(level, [0.9, 1.15, 1.4, 1.66, 1.94, 2.16]),
+      attackSpeed: scaleRate(floatFromAnchors(level, [0.9, 1.15, 1.4, 1.66, 1.94, 2.16])),
       slowPercent: intFromAnchors(level, [39, 54, 64, 72, 80, 86]),
       slowDuration: floatFromAnchors(level, [2.1, 2.6, 3.1, 3.5, 3.9, 4.4]),
       windTargets: windTargetsByLevel(level),
@@ -173,9 +202,9 @@ function createLightningLevels() {
     levels.push({
       level,
       cost: costFromAnchors(level, [960, 1760, 3340, 6260, 11400, 20500]),
-      damage: intFromAnchors(level, [54, 112, 198, 318, 460, 648]),
+      damage: scaleDamage(intFromAnchors(level, [54, 112, 198, 318, 460, 648])),
       range: scaledRangeFromAnchors(level, [2.76, 2.96, 3.16, 3.36, 3.56, 3.76]),
-      attackSpeed: floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5]),
+      attackSpeed: scaleRate(floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5])),
       chainCount: lightningChainsByLevel(level),
       chainFalloff: intFromAnchors(level, [38, 35, 32, 28, 24, 20]),
       shockVisualDuration: floatFromAnchors(level, [0.58, 0.66, 0.74, 0.82, 0.9, 1.0]),
@@ -331,14 +360,14 @@ export const MAPS = {
     seed: 101,
     startingCoins: 10000,
     startingXp: 0,
-    slotActivationCost: 45,
+    slotActivationCost: 65,
     mapClearReward: { coins: 600, xp: 80 },
     passCriteria: createPassCriteria(0),
-    slotRiverClearancePx: 13,
+    slotRiverClearancePx: 9,
     riverVisual: { bankWidth: 58, waterWidth: 42, highlightWidth: 14, laneDashWidth: 2.2 },
     leakPenalty: { coins: 235, xp: 8 },
     unlockRequirement: { nextMap: 'map_02_split_delta', minXp: 2200 },
-    enemyScale: { hp: 1.18, speed: 1.08, rewards: 0.74 },
+    enemyScale: { hp: 1.24, speed: 1.1, rewards: 0.74 },
     xpWaveBonus: 14,
     xpMapBonus: 190,
     routes: [
@@ -393,14 +422,14 @@ export const MAPS = {
     seed: 209,
     startingCoins: 12000,
     startingXp: 0,
-    slotActivationCost: 90,
+    slotActivationCost: 70,
     mapClearReward: { coins: 900, xp: 120 },
     passCriteria: createPassCriteria(1),
-    slotRiverClearancePx: 13,
+    slotRiverClearancePx: 8,
     riverVisual: { bankWidth: 56, waterWidth: 40, highlightWidth: 13, laneDashWidth: 2.1 },
     leakPenalty: { coins: 235, xp: 10 },
     unlockRequirement: { nextMap: 'map_03_marsh_maze', minXp: 3600 },
-    enemyScale: { hp: 1.58, speed: 1.18, rewards: 0.74 },
+    enemyScale: { hp: 1.5, speed: 1.18, rewards: 0.75 },
     xpWaveBonus: 20,
     xpMapBonus: 300,
     routes: [
@@ -469,14 +498,14 @@ export const MAPS = {
     seed: 317,
     startingCoins: 19000,
     startingXp: 0,
-    slotActivationCost: 96,
+    slotActivationCost: 80,
     mapClearReward: { coins: 1350, xp: 180 },
     passCriteria: createPassCriteria(2),
-    slotRiverClearancePx: 12,
+    slotRiverClearancePx: 9,
     riverVisual: { bankWidth: 54, waterWidth: 38, highlightWidth: 12, laneDashWidth: 2.0 },
     leakPenalty: { coins: 275, xp: 14 },
     unlockRequirement: { nextMap: 'map_04_tide_lock', minXp: 6200 },
-    enemyScale: { hp: 1.48, speed: 1.145, rewards: 0.75 },
+    enemyScale: { hp: 1.39, speed: 1.115, rewards: 0.76 },
     xpWaveBonus: 28,
     xpMapBonus: 460,
     routes: [
@@ -573,14 +602,14 @@ export const MAPS = {
     seed: 431,
     startingCoins: 23000,
     startingXp: 0,
-    slotActivationCost: 95,
+    slotActivationCost: 90,
     mapClearReward: { coins: 1800, xp: 240 },
     passCriteria: createPassCriteria(3),
-    slotRiverClearancePx: 12,
+    slotRiverClearancePx: 9,
     riverVisual: { bankWidth: 50, waterWidth: 35, highlightWidth: 11, laneDashWidth: 1.8 },
     leakPenalty: { coins: 320, xp: 18 },
     unlockRequirement: { nextMap: 'map_05_blackwater_lattice', minXp: 9200 },
-    enemyScale: { hp: 1.58, speed: 1.17, rewards: 0.75 },
+    enemyScale: { hp: 1.55, speed: 1.15, rewards: 0.75 },
     xpWaveBonus: 34,
     xpMapBonus: 620,
     routes: [
@@ -697,14 +726,14 @@ export const MAPS = {
     seed: 547,
     startingCoins: 25500,
     startingXp: 0,
-    slotActivationCost: 125,
+    slotActivationCost: 105,
     mapClearReward: { coins: 2100, xp: 290 },
     passCriteria: createPassCriteria(4),
-    slotRiverClearancePx: 11,
+    slotRiverClearancePx: 8,
     riverVisual: { bankWidth: 48, waterWidth: 33, highlightWidth: 10, laneDashWidth: 1.7 },
     leakPenalty: { coins: 350, xp: 22 },
     unlockRequirement: { nextMap: null, minXp: 12800 },
-    enemyScale: { hp: 1.68, speed: 1.21, rewards: 0.75 },
+    enemyScale: { hp: 1.54, speed: 1.16, rewards: 0.74 },
     xpWaveBonus: 41,
     xpMapBonus: 780,
     routes: [
