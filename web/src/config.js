@@ -237,6 +237,42 @@ const map04Waves = createWavePlan({
   surgeBoost: 3,
 });
 
+const PASS_RUN_TARGETS_BY_MAP_INDEX = [30, 50, 60, 90, 100, 120];
+const MC_PASS_RATE_TARGETS_BY_MAP_INDEX = [0.9, 0.85, 0.8, 0.77, 0.75, 0.7];
+const FAIL_PENALTY_RUN_EQUIVALENT = 2;
+const RETENTION_PROBE_RUNS = 100;
+const PASS_RATE_PROBE_RUNS = 1000;
+
+function passRunTargetForMapIndex(mapIndex) {
+  if (mapIndex < PASS_RUN_TARGETS_BY_MAP_INDEX.length) {
+    return PASS_RUN_TARGETS_BY_MAP_INDEX[mapIndex];
+  }
+  const lastTarget = PASS_RUN_TARGETS_BY_MAP_INDEX[PASS_RUN_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = PASS_RUN_TARGETS_BY_MAP_INDEX[PASS_RUN_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const growthStep = Math.max(10, lastTarget - previousTarget);
+  return lastTarget + growthStep * (mapIndex - PASS_RUN_TARGETS_BY_MAP_INDEX.length + 1);
+}
+
+function passRateTargetForMapIndex(mapIndex) {
+  if (mapIndex < MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length) {
+    return MC_PASS_RATE_TARGETS_BY_MAP_INDEX[mapIndex];
+  }
+  const lastTarget = MC_PASS_RATE_TARGETS_BY_MAP_INDEX[MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = MC_PASS_RATE_TARGETS_BY_MAP_INDEX[MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const reductionStep = Math.max(0.02, previousTarget - lastTarget);
+  return Math.max(0.5, roundTo(lastTarget - reductionStep * (mapIndex - MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length + 1), 2));
+}
+
+function createPassCriteria(mapIndex) {
+  return {
+    unlockRunsTarget: passRunTargetForMapIndex(mapIndex),
+    failRunPenaltyEquivalent: FAIL_PENALTY_RUN_EQUIVALENT,
+    retentionProbeRuns: RETENTION_PROBE_RUNS,
+    passRateProbeRuns: PASS_RATE_PROBE_RUNS,
+    mcPassRateTarget: passRateTargetForMapIndex(mapIndex),
+  };
+}
+
 export const MAPS = {
   map_01_river_bend: {
     mapId: 'map_01_river_bend',
@@ -246,6 +282,7 @@ export const MAPS = {
     startingXp: 0,
     slotActivationCost: 45,
     mapClearReward: { coins: 600, xp: 80 },
+    passCriteria: createPassCriteria(0),
     slotRiverClearancePx: 13,
     riverVisual: { bankWidth: 58, waterWidth: 42, highlightWidth: 14, laneDashWidth: 2.2 },
     leakPenalty: { coins: 235, xp: 8 },
@@ -307,6 +344,7 @@ export const MAPS = {
     startingXp: 0,
     slotActivationCost: 65,
     mapClearReward: { coins: 900, xp: 120 },
+    passCriteria: createPassCriteria(1),
     slotRiverClearancePx: 13,
     riverVisual: { bankWidth: 56, waterWidth: 40, highlightWidth: 13, laneDashWidth: 2.1 },
     leakPenalty: { coins: 235, xp: 10 },
@@ -382,6 +420,7 @@ export const MAPS = {
     startingXp: 0,
     slotActivationCost: 85,
     mapClearReward: { coins: 1350, xp: 180 },
+    passCriteria: createPassCriteria(2),
     slotRiverClearancePx: 12,
     riverVisual: { bankWidth: 54, waterWidth: 38, highlightWidth: 12, laneDashWidth: 2.0 },
     leakPenalty: { coins: 275, xp: 14 },
@@ -485,6 +524,7 @@ export const MAPS = {
     startingXp: 0,
     slotActivationCost: 88,
     mapClearReward: { coins: 1800, xp: 240 },
+    passCriteria: createPassCriteria(3),
     slotRiverClearancePx: 12,
     riverVisual: { bankWidth: 50, waterWidth: 35, highlightWidth: 11, laneDashWidth: 1.8 },
     leakPenalty: { coins: 320, xp: 18 },
@@ -655,4 +695,12 @@ export const CAMPAIGN_INFO = {
   maxTowerLevel: MAX_TOWER_LEVEL,
   mapCount: Object.keys(MAPS).length,
   minFleetPerMap: 200,
+};
+
+export const CAMPAIGN_PASS_CRITERIA = {
+  failRunPenaltyEquivalent: FAIL_PENALTY_RUN_EQUIVALENT,
+  retentionProbeRuns: RETENTION_PROBE_RUNS,
+  passRateProbeRuns: PASS_RATE_PROBE_RUNS,
+  unlockRunsByMapIndex: PASS_RUN_TARGETS_BY_MAP_INDEX.slice(),
+  mcPassRateByMapIndex: MC_PASS_RATE_TARGETS_BY_MAP_INDEX.slice(),
 };
