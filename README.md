@@ -32,9 +32,9 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 3. Magic Tower
 - Role: elemental effects and burst utility
 - Initial elements:
-  - Fire (fireball impact + persistent 3-second burn zone)
+  - Fire (fireball impact + persistent 3-second burn zone + ignite burn DoT on hit boats)
   - Wind (multi-target slow control)
-  - Lightning (burst or chain)
+  - Lightning (burst or chain, with short shock-state visuals on affected boats)
 
 ### Enemy Fleets (Pirate Boats)
 
@@ -60,11 +60,12 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 ### Economy
 
 - Coins are used for:
-  - tower placement
+  - slot activation (pay once per slot per map run)
+  - tower placement (after slot activation)
   - tower upgrades
 - Coins are gained from:
   - destroying enemy boats
-  - completing waves/maps (optional bonus)
+  - completing waves/maps (map clear rewards included)
 - Coins are lost from:
   - leak penalties
 
@@ -72,7 +73,13 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 
 - XP gained by successful defense and completions.
 - XP deducted on leak/failure conditions.
-- Map unlocks require XP milestones.
+- Campaign pass criteria standard:
+  - one failed run deducts about `2` run-equivalents of progression XP,
+  - expected unlock run targets scale by map index: `30`, `50`, `60`, `90`, `100`, `120`...
+  - Monte Carlo pass-rate targets decline with map difficulty (`Map 5: 75%`, `Map 6: 70%`).
+- Map unlocks require both:
+  - previous map(s) cleared in sequence,
+  - required XP milestone.
 - Difficulty rises with progression:
   - stronger fleets
   - faster boats
@@ -215,6 +222,18 @@ Runtime control additions:
 - `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
 - `Tower Curves` panel: visualizes each tower's capability growth and cost growth across levels 1-50.
 
+Campaign progression additions:
+- Slots now require explicit unlock payment before towers can be placed.
+- Coins and XP carry forward across map transitions.
+- Each cleared map grants a clear reward (coins/XP).
+- Map unlocks are sequential (cannot skip earlier maps).
+- New playable map added: `Map 4 - Tide Lock`.
+
+Progress persistence:
+- Player progress now auto-saves continuously and on tab close.
+- Session identity is indexed by `homeland_sid` cookie, with client IP fallback if cookie is missing.
+- Data is stored server-side in `/Users/rc/Project/Homeland/.data/player-progress.json` and mirrored in browser `localStorage` as fallback.
+
 Run local web prototype:
 
 ```bash
@@ -239,6 +258,9 @@ npm run balance:sim
 This command runs:
 - multipliers search,
 - full 1,000-run verification,
+- campaign pass-standard framework:
+  - retention baseline: `100` random-policy campaign probes per map,
+  - fixed-budget pass-rate check: `1000` runs using retained-coins baseline,
 - diversity scenario matrix (mono/duo/mixed),
 - controlled OAT sensitivity checks (one factor at a time),
 - random policy baseline (`random_all`) with initial map coins.
@@ -246,7 +268,10 @@ This command runs:
 Current random-policy balance intent (not strict hard limits):
 - Map 1 clear rate near 90%,
 - Map 2 clear rate near 85%,
-- Map 3 clear rate near 80%.
+- Map 3 clear rate near 80%,
+- Map 4 clear rate near 77%,
+- Map 5 clear rate near 75%,
+- Map 6 clear rate near 70%.
 
 Scaling policy for future iterations:
 - Keep tower level curves mostly stable for consistency.
@@ -264,6 +289,13 @@ Diversity + controlled-variable suite without search (faster):
 ```bash
 cd /Users/rc/Project/Homeland
 npm run balance:diversity
+```
+
+Pass-standard framework only (retention baseline + fixed-budget pass-rate checks):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:standard
 ```
 
 GS75 CUDA-first balance run:

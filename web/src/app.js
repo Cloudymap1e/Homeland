@@ -1,5 +1,11 @@
 import { HomelandGame, getEnemyPosition } from './game-core.js';
-import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, CAMPAIGN_INFO } from './config.js';
+import {
+  MAPS,
+  DEFAULT_MAP_ID,
+  TOWER_CONFIG,
+  CAMPAIGN_INFO,
+  CAMPAIGN_PASS_CRITERIA,
+} from './config.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -31,13 +37,13 @@ const btnToggleReportPanel = document.getElementById('toggle-report-panel');
 const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
 const btnHideReportPanel = document.getElementById('hide-report-panel');
 const btnHideCurvePanel = document.getElementById('hide-curve-panel');
-const btnReset = document.getElementById('reset');
 const btnLoadMap = document.getElementById('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
 let selectedTowerId = 'arrow';
 let selectedCurveTowerId = 'arrow';
 let selectedSlotId = null;
+let rangePreviewTowerId = null;
 let lastTime = performance.now();
 let simTime = 0;
 let autoContinueEnabled = false;
@@ -47,6 +53,7 @@ let slotPopoutNotice = '';
 let slotPopoutRenderKey = '';
 let reportPanelVisible = true;
 let curvePanelVisible = true;
+let mapSelectRenderKey = '';
 
 const SLOT_RADIUS = 16;
 const WORLD_SCALE = 10;
@@ -66,8 +73,25 @@ const STATE_LABELS = {
   wave_result: 'Wave Clear',
   map_result: 'Map Result',
 };
+const TOWER_RANGE_COLORS = {
+  arrow: { fill: [245, 214, 131], edge: [252, 235, 171] },
+  bone: { fill: [243, 171, 97], edge: [253, 205, 152] },
+  magic_fire: { fill: [255, 124, 88], edge: [255, 188, 156] },
+  magic_wind: { fill: [137, 235, 255], edge: [199, 244, 255] },
+  magic_lightning: { fill: [255, 215, 109], edge: [255, 237, 162] },
+};
+const PROGRESS_ENDPOINT = '/api/progress';
+const LOCAL_PROGRESS_KEY = 'homeland_progress_v1';
+const SAVE_DEBOUNCE_MS = 420;
+const PERIODIC_SAVE_MS = 1500;
+const PERSISTENCE_VERSION = 1;
 
 const visualEffects = [];
+let persistenceReady = false;
+let persistTimerId = null;
+let lastPersistedFingerprint = '';
+let nextPeriodicPersistAt = 0;
+let persistQueue = Promise.resolve();
 
 const terrainLayer = document.createElement('canvas');
 terrainLayer.width = canvas.width;
@@ -91,21 +115,65 @@ function hashNoise(seed) {
 function drawGrassTexture(target, seed) {
   const noise = hashNoise(seed);
   const g = target.createLinearGradient(0, 0, 0, canvas.height);
-  g.addColorStop(0, '#5e8b44');
-  g.addColorStop(0.48, '#4f7a38');
-  g.addColorStop(1, '#3f652d');
+  g.addColorStop(0, '#5f8f46');
+  g.addColorStop(0.42, '#4f7c38');
+  g.addColorStop(1, '#3c612b');
   target.fillStyle = g;
   target.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let i = 0; i < 9800; i += 1) {
+  for (let i = 0; i < 12800; i += 1) {
     const n = noise(i + 1);
     const x = (noise(i + 9) * canvas.width) | 0;
     const y = (noise(i + 13) * canvas.height) | 0;
-    const size = 1 + noise(i + 71) * 2.8;
-    const alpha = 0.05 + noise(i + 41) * 0.18;
+    const size = 0.8 + noise(i + 71) * 2.4;
+    const alpha = 0.04 + noise(i + 41) * 0.17;
 
     target.fillStyle = n > 0.62 ? `rgba(207,188,121,${alpha})` : `rgba(37,86,35,${alpha})`;
     target.fillRect(x, y, size, size);
+  }
+
+  for (let i = 0; i < 3400; i += 1) {
+    const x = noise(i * 5 + 120) * canvas.width;
+    const y = noise(i * 7 + 171) * canvas.height;
+    const len = 2.2 + noise(i * 11 + 211) * 5.6;
+    const angle = (noise(i * 13 + 271) - 0.5) * 1.45;
+    const sway = (noise(i * 17 + 307) - 0.5) * 1.8;
+    target.strokeStyle = `rgba(96,136,72,${0.05 + noise(i * 19 + 353) * 0.12})`;
+    target.lineWidth = 0.6 + noise(i * 23 + 401) * 0.85;
+    target.beginPath();
+    target.moveTo(x, y);
+    target.lineTo(x + Math.cos(angle) * len + sway, y - Math.sin(angle) * len);
+    target.stroke();
+  }
+
+  for (let i = 0; i < 46; i += 1) {
+    const cx = noise(i * 3 + 21) * canvas.width;
+    const cy = noise(i * 7 + 51) * canvas.height;
+    const rx = 42 + noise(i * 5 + 19) * 126;
+    const ry = 24 + noise(i * 11 + 31) * 92;
+
+    target.save();
+    target.translate(cx, cy);
+    target.rotate((noise(i * 23 + 77) - 0.5) * 1.1);
+    const patch = target.createRadialGradient(0, 0, 8, 0, 0, rx);
+    patch.addColorStop(0, 'rgba(218,196,130,0.23)');
+    patch.addColorStop(0.72, 'rgba(172,148,88,0.12)');
+    patch.addColorStop(1, 'rgba(120,96,58,0)');
+    target.fillStyle = patch;
+    target.beginPath();
+    target.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    target.fill();
+    target.restore();
+  }
+
+  for (let i = 0; i < 480; i += 1) {
+    const x = noise(i * 29 + 612) * canvas.width;
+    const y = noise(i * 31 + 641) * canvas.height;
+    const size = 0.9 + noise(i * 37 + 673) * 1.7;
+    target.fillStyle = i % 5 === 0 ? 'rgba(233,213,143,0.23)' : 'rgba(165,204,122,0.16)';
+    target.beginPath();
+    target.arc(x, y, size, 0, Math.PI * 2);
+    target.fill();
   }
 
   for (let i = 0; i < 34; i += 1) {
@@ -219,6 +287,11 @@ function traceRoute(target, waypoints) {
 
 function drawRiverLayer(target) {
   const map = game.mapConfig;
+  const visual = map.riverVisual || {};
+  const bankWidth = Number.isFinite(visual.bankWidth) ? visual.bankWidth : 56;
+  const waterWidth = Number.isFinite(visual.waterWidth) ? visual.waterWidth : 40;
+  const highlightWidth = Number.isFinite(visual.highlightWidth) ? visual.highlightWidth : 13;
+  const laneDashWidth = Number.isFinite(visual.laneDashWidth) ? visual.laneDashWidth : 2.1;
   target.clearRect(0, 0, canvas.width, canvas.height);
   target.save();
   target.lineCap = 'round';
@@ -226,33 +299,43 @@ function drawRiverLayer(target) {
 
   for (let i = 0; i < map.routes.length; i += 1) {
     const route = map.routes[i];
-    const widthSkew = 1 + i * 0.04;
-    target.strokeStyle = 'rgba(158, 147, 105, 0.86)';
-    target.lineWidth = 78 * widthSkew;
+    const widthSkew = 1 + i * 0.02;
+    target.strokeStyle = 'rgba(150, 138, 95, 0.82)';
+    target.lineWidth = bankWidth * widthSkew;
+    traceRoute(target, route.waypoints);
+    target.stroke();
+
+    target.strokeStyle = 'rgba(119, 108, 69, 0.32)';
+    target.lineWidth = Math.max(1, (bankWidth - 10) * widthSkew);
     traceRoute(target, route.waypoints);
     target.stroke();
   }
 
   for (let i = 0; i < map.routes.length; i += 1) {
     const route = map.routes[i];
-    const widthSkew = 1 + i * 0.03;
+    const widthSkew = 1 + i * 0.018;
     const river = target.createLinearGradient(0, 0, 0, canvas.height);
-    river.addColorStop(0, '#2a7cbe');
-    river.addColorStop(0.5, '#19639a');
-    river.addColorStop(1, '#2f87c6');
+    river.addColorStop(0, '#2f87c7');
+    river.addColorStop(0.52, '#1a649d');
+    river.addColorStop(1, '#3b95ce');
     target.strokeStyle = river;
-    target.lineWidth = 60 * widthSkew;
+    target.lineWidth = waterWidth * widthSkew;
     traceRoute(target, route.waypoints);
     target.stroke();
 
-    target.strokeStyle = 'rgba(118,193,240,0.36)';
-    target.lineWidth = 24 * widthSkew;
+    target.strokeStyle = 'rgba(26, 104, 164, 0.28)';
+    target.lineWidth = Math.max(1, waterWidth * 0.62 * widthSkew);
     traceRoute(target, route.waypoints);
     target.stroke();
 
-    target.setLineDash([14, 16]);
+    target.strokeStyle = 'rgba(138,206,245,0.38)';
+    target.lineWidth = highlightWidth * widthSkew;
+    traceRoute(target, route.waypoints);
+    target.stroke();
+
+    target.setLineDash([12, 14]);
     target.strokeStyle = 'rgba(230, 247, 255, 0.2)';
-    target.lineWidth = 2.5;
+    target.lineWidth = laneDashWidth;
     traceRoute(target, route.waypoints);
     target.stroke();
     target.setLineDash([]);
@@ -404,24 +487,71 @@ function clampHudWindowsToViewport() {
   }
 }
 
+function mapSelectKey() {
+  return [
+    game.mapId,
+    game.getUnlockedMapIds().join(','),
+    game.getCompletedMapIds().join(','),
+  ].join('|');
+}
+
 function rebuildMapSelect() {
+  const nextKey = mapSelectKey();
+  if (nextKey === mapSelectRenderKey && elMapSelect.options.length === Object.keys(MAPS).length) {
+    return;
+  }
+  const previousValue = elMapSelect.value || game.mapId;
+  const unlockedSet = new Set(game.getUnlockedMapIds());
+  const completedSet = new Set(game.getCompletedMapIds());
   elMapSelect.innerHTML = '';
   for (const map of Object.values(MAPS)) {
+    const unlocked = unlockedSet.has(map.mapId);
+    const completed = completedSet.has(map.mapId);
+    const status = completed ? 'Cleared' : unlocked ? 'Open' : 'Locked';
     const option = document.createElement('option');
     option.value = map.mapId;
-    option.textContent = `${map.name} (${map.waves.length} waves / ${map.fleetTarget} boats)`;
+    option.disabled = !unlocked;
+    option.textContent = `${map.name} (${map.waves.length} waves / ${map.fleetTarget} boats) [${status}]`;
     elMapSelect.appendChild(option);
   }
-  elMapSelect.value = game.mapId;
+  const fallback = unlockedSet.has(previousValue) ? previousValue : game.mapId;
+  elMapSelect.value = fallback;
+  mapSelectRenderKey = nextKey;
 }
 
 function updateMapMeta() {
   const map = game.mapConfig;
+  const mapIndex = Math.max(0, Object.keys(MAPS).indexOf(map.mapId));
+  const passCriteria = map.passCriteria || {
+    unlockRunsTarget:
+      CAMPAIGN_PASS_CRITERIA.unlockRunsByMapIndex[
+        Math.min(mapIndex, CAMPAIGN_PASS_CRITERIA.unlockRunsByMapIndex.length - 1)
+      ],
+    failRunPenaltyEquivalent: CAMPAIGN_PASS_CRITERIA.failRunPenaltyEquivalent,
+    retentionProbeRuns: CAMPAIGN_PASS_CRITERIA.retentionProbeRuns,
+    passRateProbeRuns: CAMPAIGN_PASS_CRITERIA.passRateProbeRuns,
+    mcPassRateTarget:
+      CAMPAIGN_PASS_CRITERIA.mcPassRateByMapIndex[
+        Math.min(mapIndex, CAMPAIGN_PASS_CRITERIA.mcPassRateByMapIndex.length - 1)
+      ],
+  };
+  const unlockText = map.unlockRequirement?.nextMap
+    ? `Unlock XP: ${map.unlockRequirement.minXp}`
+    : 'Final map';
+  const slotFee = Number(map.slotActivationCost) || 0;
+  const clearReward = Number(map.mapClearReward?.coins) || 0;
+  const passRateTarget = Number(passCriteria.mcPassRateTarget) || 0;
+  const passRateTargetPct = Math.round(passRateTarget * 100);
   elMapMeta.textContent = [
     `Routes: ${map.routes.length}`,
     `Waves: ${map.waves.length}`,
     `Fleet: ${map.fleetTarget}+ boats`,
-    `Unlock XP: ${map.unlockRequirement.minXp}`,
+    `Slot unlock: ${formatNumber(slotFee)}c`,
+    `Clear reward: +${formatNumber(clearReward)}c`,
+    `Pass standard: ${formatNumber(passCriteria.unlockRunsTarget)} runs @ ${passRateTargetPct}% MC`,
+    `Fail penalty: ~${passCriteria.failRunPenaltyEquivalent} run XP`,
+    `MC probes: ${passCriteria.retentionProbeRuns}/${passCriteria.passRateProbeRuns}`,
+    unlockText,
     `Tower cap: ${CAMPAIGN_INFO.maxTowerLevel}`,
   ].join(' | ');
 }
@@ -432,6 +562,212 @@ function formatNumber(value) {
 
 function stateLabel(stateId) {
   return STATE_LABELS[stateId] || stateId;
+}
+
+function readLocalProgress() {
+  try {
+    const raw = localStorage.getItem(LOCAL_PROGRESS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalProgress(payload) {
+  try {
+    localStorage.setItem(LOCAL_PROGRESS_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore local storage failures (private mode/quota).
+  }
+}
+
+function createProgressPayload() {
+  return {
+    version: PERSISTENCE_VERSION,
+    updatedAt: Date.now(),
+    autoContinueEnabled,
+    selectedTowerId,
+    selectedCurveTowerId,
+    reportPanelVisible,
+    curvePanelVisible,
+    game: game.exportState(),
+  };
+}
+
+function createProgressFingerprint(payload) {
+  const stable = {
+    autoContinueEnabled: payload.autoContinueEnabled,
+    selectedTowerId: payload.selectedTowerId,
+    selectedCurveTowerId: payload.selectedCurveTowerId,
+    reportPanelVisible: payload.reportPanelVisible,
+    curvePanelVisible: payload.curvePanelVisible,
+    game: payload.game,
+  };
+  return JSON.stringify(stable);
+}
+
+async function fetchServerProgress() {
+  try {
+    const response = await fetch(PROGRESS_ENDPOINT, {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = await response.json();
+    if (!body || typeof body !== 'object') {
+      return null;
+    }
+    return body.progress && typeof body.progress === 'object' ? body.progress : null;
+  } catch {
+    return null;
+  }
+}
+
+async function persistServerProgress(payload, keepalive = false) {
+  const response = await fetch(PROGRESS_ENDPOINT, {
+    method: 'PUT',
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    keepalive,
+    body: JSON.stringify(payload),
+  });
+  return response.ok;
+}
+
+function applyPersistedProgress(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  if (!payload.game || typeof payload.game !== 'object') {
+    return false;
+  }
+  const imported = game.importState(payload.game);
+  if (!imported) {
+    return false;
+  }
+
+  if (typeof payload.selectedTowerId === 'string' && payload.selectedTowerId in TOWER_CONFIG) {
+    selectedTowerId = payload.selectedTowerId;
+  }
+  if (typeof payload.selectedCurveTowerId === 'string' && payload.selectedCurveTowerId in TOWER_CONFIG) {
+    selectedCurveTowerId = payload.selectedCurveTowerId;
+  }
+  autoContinueEnabled = Boolean(payload.autoContinueEnabled);
+  reportPanelVisible = payload.reportPanelVisible !== false;
+  curvePanelVisible = payload.curvePanelVisible !== false;
+
+  selectedSlotId = null;
+  slotPopoutNotice = '';
+  rangePreviewTowerId = null;
+  closeSlotPopout();
+  visualEffects.length = 0;
+  fastForwardUntilMs = 0;
+  simTime = 0;
+  lastTime = performance.now();
+
+  rebuildMapSelect();
+  elMapSelect.value = game.mapId;
+  elCurveTower.value = selectedCurveTowerId;
+  markCurveDirty();
+  setPanelVisibility('report', reportPanelVisible);
+  setPanelVisibility('curve', curvePanelVisible);
+  buildStaticMapLayers();
+  updateMapMeta();
+  updateHud();
+  return true;
+}
+
+function pickNewestProgress(remote, local) {
+  const remoteTs = Number(remote?.updatedAt) || 0;
+  const localTs = Number(local?.updatedAt) || 0;
+  if (!remote && !local) {
+    return null;
+  }
+  if (!remote) {
+    return local;
+  }
+  if (!local) {
+    return remote;
+  }
+  return remoteTs >= localTs ? remote : local;
+}
+
+async function hydrateProgress() {
+  const [remote, local] = await Promise.all([fetchServerProgress(), Promise.resolve(readLocalProgress())]);
+  const payload = pickNewestProgress(remote, local);
+  if (!payload) {
+    return;
+  }
+  if (!applyPersistedProgress(payload)) {
+    return;
+  }
+  const fingerprint = createProgressFingerprint(payload);
+  lastPersistedFingerprint = fingerprint;
+}
+
+async function persistProgressNow(keepalive = false) {
+  const payload = createProgressPayload();
+  const fingerprint = createProgressFingerprint(payload);
+  if (fingerprint === lastPersistedFingerprint) {
+    return;
+  }
+
+  writeLocalProgress(payload);
+  try {
+    await persistServerProgress(payload, keepalive);
+    lastPersistedFingerprint = fingerprint;
+  } catch {
+    // Keep local backup if network persistence is unavailable.
+  }
+}
+
+function queueProgressPersist(keepalive = false) {
+  if (!persistenceReady) {
+    return;
+  }
+  persistQueue = persistQueue
+    .then(() => persistProgressNow(keepalive))
+    .catch(() => {});
+}
+
+function scheduleProgressPersist() {
+  if (!persistenceReady || persistTimerId !== null) {
+    return;
+  }
+  persistTimerId = window.setTimeout(() => {
+    persistTimerId = null;
+    queueProgressPersist(false);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function flushProgressOnUnload() {
+  if (!persistenceReady) {
+    return;
+  }
+  const payload = createProgressPayload();
+  writeLocalProgress(payload);
+  const body = JSON.stringify(payload);
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body], { type: 'application/json' });
+    navigator.sendBeacon(PROGRESS_ENDPOINT, blob);
+    return;
+  }
+  fetch(PROGRESS_ENDPOINT, {
+    method: 'POST',
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    keepalive: true,
+    body,
+  }).catch(() => {});
 }
 
 function markCurveDirty() {
@@ -599,6 +935,7 @@ function canModifyTowers() {
 }
 
 function closeSlotPopout() {
+  rangePreviewTowerId = null;
   elSlotPopout.classList.add('hidden');
   elSlotPopout.innerHTML = '';
   slotPopoutRenderKey = '';
@@ -675,9 +1012,10 @@ function slotPopoutStateKey(slotId = selectedSlotId) {
     return '';
   }
   const tower = game.getTower(slot.id);
+  const activationKey = game.isSlotActivated(slot.id) ? 'active' : 'locked';
   const towerKey = tower ? `${tower.towerId}:${tower.level}` : 'empty';
   const coinsKey = canModifyTowers() ? game.coins : 'locked';
-  return [slot.id, towerKey, game.state, coinsKey, slotPopoutNotice].join('|');
+  return [slot.id, activationKey, towerKey, game.state, coinsKey, slotPopoutNotice].join('|');
 }
 
 function renderSlotPopout(slotId = selectedSlotId) {
@@ -690,6 +1028,9 @@ function renderSlotPopout(slotId = selectedSlotId) {
   selectedSlotId = slot.id;
   const tower = game.getTower(slot.id);
   const buildPhase = canModifyTowers();
+  const slotActivated = game.isSlotActivated(slot.id);
+  const slotActivationCost = game.getSlotActivationCost(slot.id);
+  rangePreviewTowerId = null;
 
   elSlotPopout.innerHTML = '';
   elSlotPopout.classList.remove('hidden');
@@ -701,8 +1042,10 @@ function renderSlotPopout(slotId = selectedSlotId) {
   const helper = document.createElement('p');
   helper.textContent = tower
     ? 'Upgrade or inspect this tower.'
+    : !slotActivated
+      ? `Activate this slot for ${formatNumber(slotActivationCost)}c, then place towers.`
     : buildPhase
-      ? 'Pick a tower to build on this slot.'
+      ? 'Pick a tower to build on this activated slot. Hover an option to preview range.'
       : 'Building is locked right now.';
   elSlotPopout.appendChild(helper);
 
@@ -718,7 +1061,18 @@ function renderSlotPopout(slotId = selectedSlotId) {
     ];
     meta.textContent = lines.join('\n');
   } else {
-    meta.textContent = `Open ground ready for placement.\nCoins available: ${formatNumber(game.coins)}`;
+    if (slotActivated) {
+      meta.textContent = [
+        'Slot activated and ready for towers.',
+        `Coins available: ${formatNumber(game.coins)}`,
+      ].join('\n');
+    } else {
+      meta.textContent = [
+        'Locked build ground.',
+        `Activation fee: ${formatNumber(slotActivationCost)}c`,
+        `Coins available: ${formatNumber(game.coins)}`,
+      ].join('\n');
+    }
   }
   elSlotPopout.appendChild(meta);
 
@@ -727,16 +1081,32 @@ function renderSlotPopout(slotId = selectedSlotId) {
   elSlotPopout.appendChild(actions);
 
   if (!tower) {
-    for (const cfg of Object.values(TOWER_CONFIG)) {
-      const cost = cfg.levels[0].cost;
-      const disabled = !buildPhase || game.coins < cost;
+    if (!slotActivated) {
+      const disabled = !buildPhase || game.coins < slotActivationCost;
       actions.appendChild(
         createPopoutAction(
-          `${cfg.name} - ${formatNumber(cost)}c`,
+          `Activate Slot - ${formatNumber(slotActivationCost)}c`,
+          'Pay once for this map run, then tower builds use tower-only costs.',
+          () => {
+            const result = game.activateSlot(slot.id);
+            slotPopoutNotice = result.ok ? '' : result.error;
+            updateHud();
+            scheduleProgressPersist();
+          },
+          disabled
+        )
+      );
+    } else {
+      for (const cfg of Object.values(TOWER_CONFIG)) {
+        const towerCost = cfg.levels[0].cost;
+        const disabled = !buildPhase || game.coins < towerCost;
+        const action = createPopoutAction(
+          `${cfg.name} - ${formatNumber(towerCost)}c`,
           `L1 DMG ${cfg.levels[0].damage} | RNG ${cfg.levels[0].range}`,
           () => {
             const result = game.buildTower(slot.id, cfg.id);
             slotPopoutNotice = result.ok ? '' : result.error;
+            rangePreviewTowerId = null;
             if (result.ok) {
               selectedTowerId = cfg.id;
               selectedCurveTowerId = cfg.id;
@@ -744,10 +1114,28 @@ function renderSlotPopout(slotId = selectedSlotId) {
               markCurveDirty();
             }
             updateHud();
+            scheduleProgressPersist();
           },
           disabled
-        )
-      );
+        );
+        action.addEventListener('pointerenter', () => {
+          rangePreviewTowerId = cfg.id;
+        });
+        action.addEventListener('pointerleave', () => {
+          if (rangePreviewTowerId === cfg.id) {
+            rangePreviewTowerId = null;
+          }
+        });
+        action.addEventListener('focus', () => {
+          rangePreviewTowerId = cfg.id;
+        });
+        action.addEventListener('blur', () => {
+          if (rangePreviewTowerId === cfg.id) {
+            rangePreviewTowerId = null;
+          }
+        });
+        actions.appendChild(action);
+      }
     }
   } else {
     const cfg = TOWER_CONFIG[tower.towerId];
@@ -767,6 +1155,7 @@ function renderSlotPopout(slotId = selectedSlotId) {
           const result = game.upgradeTower(slot.id);
           slotPopoutNotice = result.ok ? '' : result.error;
           updateHud();
+          scheduleProgressPersist();
         },
         disabled
       )
@@ -812,6 +1201,7 @@ function refreshSlotPopout() {
 
 function updateHud() {
   const snap = game.getSnapshot();
+  rebuildMapSelect();
   elCoinsOverlay.textContent = formatNumber(snap.coins);
   elXpOverlay.textContent = formatNumber(snap.xp);
   elMapOverlay.textContent = snap.mapName;
@@ -821,7 +1211,16 @@ function updateHud() {
 
   if (snap.result) {
     if (snap.result.victory) {
-      elResult.innerHTML = `Victory on ${snap.mapName}. Next unlock reached: <strong>${snap.result.nextMapUnlocked ? 'Yes' : 'No'}</strong>`;
+      const nextMapId = game.getNextMapId();
+      const rewardCoins = Number(snap.result.mapRewardCoins || 0);
+      const rewardXp = Number(snap.result.mapRewardXp || 0);
+      const rewardText = rewardCoins > 0 || rewardXp > 0
+        ? ` Clear reward: <strong>+${formatNumber(rewardCoins)}c / +${formatNumber(rewardXp)}xp</strong>.`
+        : '';
+      const unlockText = nextMapId
+        ? ` Next map unlocked: <strong>${game.isMapUnlocked(nextMapId) ? 'Yes' : 'No'}</strong>.`
+        : ' Campaign sequence complete.';
+      elResult.innerHTML = `Victory on ${snap.mapName}.${rewardText}${unlockText}`;
     } else {
       elResult.textContent = `Defeat on ${snap.mapName}. Treasury exhausted.`;
     }
@@ -845,31 +1244,156 @@ function drawMapBase() {
 function drawBuildSlot(slot, isSelected) {
   const p = normToPx(slot);
   const tower = game.getTower(slot.id);
+  const slotActivated = game.isSlotActivated(slot.id);
+  const activationCost = game.getSlotActivationCost(slot.id);
 
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  ctx.fillStyle = tower ? 'rgba(14,26,18,0.40)' : 'rgba(31,57,29,0.32)';
+  ctx.fillStyle = tower ? 'rgba(14,26,18,0.40)' : slotActivated ? 'rgba(31,57,29,0.32)' : 'rgba(24,31,23,0.34)';
   ctx.beginPath();
   ctx.ellipse(0, 8, 22, 8, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = tower ? '#8f8466' : '#94886c';
+  ctx.fillStyle = tower ? '#8f8466' : slotActivated ? '#94886c' : '#756a52';
   ctx.beginPath();
   ctx.arc(0, 0, SLOT_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = tower ? '#786e55' : '#7c7258';
+  ctx.fillStyle = tower ? '#786e55' : slotActivated ? '#7c7258' : '#5f5642';
   ctx.beginPath();
   ctx.arc(0, 0, SLOT_RADIUS - 5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = isSelected ? '#a0f3ff' : 'rgba(250, 248, 225, 0.45)';
+  ctx.strokeStyle = isSelected ? '#a0f3ff' : slotActivated ? 'rgba(250, 248, 225, 0.45)' : 'rgba(214, 192, 145, 0.4)';
   ctx.lineWidth = isSelected ? 2.5 : 1;
   ctx.beginPath();
   ctx.arc(0, 0, SLOT_RADIUS - 2, 0, Math.PI * 2);
   ctx.stroke();
 
+  if (!tower && !slotActivated) {
+    ctx.fillStyle = 'rgba(45, 33, 22, 0.9)';
+    ctx.fillRect(-3, -6, 6, 8);
+    ctx.fillRect(-6, -1, 12, 7);
+    if (activationCost > 0) {
+      const label = String(activationCost);
+      ctx.fillStyle = 'rgba(248, 226, 152, 0.9)';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(label, -10, 14);
+    }
+  }
+
+  ctx.restore();
+}
+
+function rgba(rgb, alpha) {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+function selectedRangeData() {
+  if (!selectedSlotId) {
+    return null;
+  }
+
+  const slot = game.getBuildSlots().find((candidate) => candidate.id === selectedSlotId);
+  if (!slot) {
+    return null;
+  }
+
+  const tower = game.getTower(slot.id);
+  if (tower) {
+    const cfg = TOWER_CONFIG[tower.towerId];
+    const levelCfg = cfg?.levels[tower.level - 1];
+    if (!levelCfg) {
+      return null;
+    }
+    return {
+      slot,
+      towerId: tower.towerId,
+      range: levelCfg.range,
+      preview: false,
+      label: `${cfg.name} L${tower.level}`,
+    };
+  }
+
+  const towerId = rangePreviewTowerId && TOWER_CONFIG[rangePreviewTowerId]
+    ? rangePreviewTowerId
+    : selectedTowerId in TOWER_CONFIG
+      ? selectedTowerId
+      : 'arrow';
+  if (!game.isSlotActivated(slot.id)) {
+    return null;
+  }
+  const cfg = TOWER_CONFIG[towerId];
+  if (!cfg) {
+    return null;
+  }
+  return {
+    slot,
+    towerId,
+    range: cfg.levels[0].range,
+    preview: true,
+    label: `${cfg.name} L1`,
+  };
+}
+
+function drawSelectedTowerRange() {
+  const data = selectedRangeData();
+  if (!data) {
+    return;
+  }
+
+  const p = normToPx(data.slot);
+  const radius = (data.range / WORLD_SCALE) * canvas.width;
+  const palette = TOWER_RANGE_COLORS[data.towerId] || TOWER_RANGE_COLORS.arrow;
+  const alphaScale = data.preview ? 0.82 : 1;
+
+  ctx.save();
+
+  const spread = ctx.createRadialGradient(p.x, p.y, Math.max(8, radius * 0.18), p.x, p.y, radius);
+  spread.addColorStop(0, rgba(palette.fill, 0.04 * alphaScale));
+  spread.addColorStop(0.7, rgba(palette.fill, 0.17 * alphaScale));
+  spread.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = spread;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.setLineDash([10, 6]);
+  ctx.strokeStyle = rgba(palette.edge, 0.9 * alphaScale);
+  ctx.lineWidth = data.preview ? 2.2 : 2.9;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = rgba(palette.fill, 0.4 * alphaScale);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, Math.max(12, radius - 6), 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = rgba(palette.edge, 0.88 * alphaScale);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const label = `${data.label} RNG ${data.range.toFixed(2)}`;
+  ctx.font = 'bold 11px monospace';
+  const textWidth = ctx.measureText(label).width;
+  const boxWidth = Math.ceil(textWidth) + 14;
+  const boxHeight = 18;
+  const x = Math.max(8, Math.min(canvas.width - boxWidth - 8, p.x - boxWidth * 0.5));
+  const y = Math.max(12, p.y - radius - boxHeight - 8);
+
+  ctx.fillStyle = `rgba(8, 14, 24, ${0.78 * alphaScale})`;
+  ctx.fillRect(x, y, boxWidth, boxHeight);
+  ctx.strokeStyle = rgba(palette.edge, 0.95 * alphaScale);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, boxWidth - 1, boxHeight - 1);
+
+  ctx.fillStyle = `rgba(243, 247, 255, ${0.98 * alphaScale})`;
+  ctx.fillText(label, x + 7, y + 12.5);
   ctx.restore();
 }
 
@@ -1071,6 +1595,176 @@ function drawBoat(enemy, p, angle) {
   ctx.restore();
 }
 
+function enemyPhase(enemy) {
+  const key = `${enemy.id}:${enemy.enemyType}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 33 + key.charCodeAt(i)) % 100000;
+  }
+  return hash / 100000;
+}
+
+function drawWindTornadoOverlay(enemy, p, angle, phase) {
+  const slowDuration = enemy.slowDurationLeft || 0;
+  const slowPercent = enemy.slowPercent || 0;
+  if (slowDuration <= 0 || slowPercent <= 0) {
+    return;
+  }
+
+  const slowStrength = Math.min(1, slowPercent / 86);
+  const durationStrength = Math.min(1, slowDuration / 2.6);
+  const intensity = (0.72 + slowStrength * 0.28) * (0.78 + durationStrength * 0.22);
+
+  ctx.save();
+  ctx.translate(p.x, p.y + 3);
+  ctx.rotate(angle * 0.14 + simTime * (2.2 + slowStrength * 1.5) + phase);
+
+  const cone = ctx.createLinearGradient(0, -28, 0, 12);
+  cone.addColorStop(0, `rgba(194,249,255,${0.18 * intensity})`);
+  cone.addColorStop(0.45, `rgba(157,231,250,${0.13 * intensity})`);
+  cone.addColorStop(1, 'rgba(130,206,238,0)');
+  ctx.fillStyle = cone;
+  ctx.beginPath();
+  ctx.moveTo(-10, 10);
+  ctx.quadraticCurveTo(0, -26, 10, 10);
+  ctx.closePath();
+  ctx.fill();
+
+  for (let i = 0; i < 5; i += 1) {
+    const t = i / 4;
+    const y = 8 - t * 26;
+    const radiusX = 8 + t * 11 + Math.sin(simTime * 8 + phase * 11 + i * 1.7) * 1.4;
+    const radiusY = 2.8 + t * 1.8;
+    ctx.strokeStyle = `rgba(166,244,255,${(0.32 + t * 0.4) * intensity})`;
+    ctx.lineWidth = 1.2 + t * 0.75;
+    ctx.beginPath();
+    ctx.ellipse(0, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawBurnOverlay(enemy, p, angle, phase) {
+  const burnDuration = enemy.burnDurationLeft || 0;
+  const burnDps = enemy.burnDps || 0;
+  if (burnDuration <= 0 || burnDps <= 0) {
+    return;
+  }
+
+  const heatStrength = Math.min(1, burnDps / 120);
+  const durationStrength = Math.min(1, burnDuration / 3.2);
+  const intensity = (0.62 + heatStrength * 0.38) * (0.76 + durationStrength * 0.24);
+
+  ctx.save();
+  ctx.translate(p.x, p.y - 2);
+  ctx.rotate(angle);
+
+  const glow = ctx.createRadialGradient(-3, 0, 2, -3, 0, 20);
+  glow.addColorStop(0, `rgba(255,203,92,${0.4 * intensity})`);
+  glow.addColorStop(0.55, `rgba(255,124,58,${0.24 * intensity})`);
+  glow.addColorStop(1, 'rgba(255,95,40,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(-3, 0, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (let i = 0; i < 4; i += 1) {
+    const x = -11 + i * 6.5;
+    const flicker = Math.sin(simTime * (9.5 + i) + phase * 17 + i * 0.9);
+    const tipY = -11 - intensity * 8 - flicker * 2.6;
+    const flameGradient = ctx.createLinearGradient(x, 4, x, tipY);
+    flameGradient.addColorStop(0, `rgba(255,126,52,${0.58 * intensity})`);
+    flameGradient.addColorStop(0.5, `rgba(255,184,72,${0.82 * intensity})`);
+    flameGradient.addColorStop(1, 'rgba(255,250,176,0)');
+    ctx.fillStyle = flameGradient;
+    ctx.beginPath();
+    ctx.moveTo(x - 2.4, 4);
+    ctx.quadraticCurveTo(x - 1.2, tipY * 0.45, x, tipY);
+    ctx.quadraticCurveTo(x + 1.5, tipY * 0.35, x + 2.4, 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    const lift = (simTime * 32 + phase * 53 + i * 13) % 22;
+    const px = -8 + i * 7 + Math.sin(simTime * 5 + i + phase * 6) * 1.4;
+    const py = 4 - lift;
+    ctx.fillStyle = `rgba(255,208,120,${0.3 * intensity})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawLightningStroke(points, alpha, lineWidth = 2.4) {
+  if (points.length < 2 || alpha <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,228,121,${alpha})`;
+  ctx.shadowColor = `rgba(255,228,121,${Math.min(0.7, alpha)})`;
+  ctx.shadowBlur = 9;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawShockOverlay(enemy, p, phase) {
+  const shockDuration = enemy.shockDurationLeft || 0;
+  if (shockDuration <= 0) {
+    return;
+  }
+
+  const intensity = Math.min(1, shockDuration / 0.95);
+  ctx.save();
+  ctx.translate(p.x, p.y - 1);
+
+  const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 22);
+  glow.addColorStop(0, `rgba(255,251,186,${0.34 + intensity * 0.24})`);
+  glow.addColorStop(0.6, `rgba(255,230,118,${0.2 + intensity * 0.18})`);
+  glow.addColorStop(1, 'rgba(255,218,92,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  const arcCount = intensity > 0.72 ? 3 : 2;
+  for (let i = 0; i < arcCount; i += 1) {
+    const start = simTime * (13 + i * 1.7) + phase * 13 + i * 1.9;
+    const points = [];
+    const steps = 4;
+    for (let j = 0; j <= steps; j += 1) {
+      const t = j / steps;
+      const a = start + t * (0.78 + i * 0.16);
+      const radius = 9 + t * 8.5;
+      const jitterX = Math.sin(simTime * 31 + phase * 29 + j * 1.8 + i) * (1.1 + intensity * 1.2);
+      const jitterY = Math.cos(simTime * 27 + phase * 17 + j * 1.6 + i * 1.4) * (1.0 + intensity);
+      points.push({
+        x: Math.cos(a) * radius + jitterX,
+        y: Math.sin(a) * radius + jitterY,
+      });
+    }
+    drawLightningStroke(points, 0.46 + intensity * 0.38, 1.7 + intensity * 0.9);
+  }
+
+  ctx.restore();
+}
+
+function drawEnemyStatusEffects(enemy, p, angle) {
+  const phase = enemyPhase(enemy);
+  drawWindTornadoOverlay(enemy, p, angle, phase);
+  drawBurnOverlay(enemy, p, angle, phase);
+  drawShockOverlay(enemy, p, phase);
+}
+
 function drawEnemies() {
   for (const enemy of game.enemies) {
     const p = normToPx(getEnemyPosition(game, enemy));
@@ -1082,6 +1776,7 @@ function drawEnemies() {
     const angle = Math.atan2(p.y - backP.y, p.x - backP.x);
 
     drawBoat(enemy, p, angle);
+    drawEnemyStatusEffects(enemy, p, angle);
 
     const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
     ctx.fillStyle = 'rgba(7, 16, 22, 0.78)';
@@ -1127,12 +1822,12 @@ function ingestAttackVisuals() {
       pushVisualEffect({ kind: 'wind', from, to, ttl: 0.34, life: 0.34 });
       continue;
     }
-    if (attack.effectType === 'lightning') {
+    if (attack.effectType === 'lightning' || attack.effectType === 'lightning_chain') {
       pushVisualEffect({
-        kind: 'lightning',
+        kind: attack.effectType === 'lightning_chain' ? 'lightning_chain' : 'lightning',
         points: createLightningPoints(from, to),
-        ttl: 0.12,
-        life: 0.12,
+        ttl: attack.effectType === 'lightning_chain' ? 0.1 : 0.14,
+        life: attack.effectType === 'lightning_chain' ? 0.1 : 0.14,
       });
       continue;
     }
@@ -1144,8 +1839,10 @@ function updateVisualEffects(dt) {
   for (const effect of visualEffects) {
     effect.ttl -= dt;
   }
-  while (visualEffects.length && visualEffects[0].ttl <= 0) {
-    visualEffects.shift();
+  for (let i = visualEffects.length - 1; i >= 0; i -= 1) {
+    if (visualEffects[i].ttl <= 0) {
+      visualEffects.splice(i, 1);
+    }
   }
 }
 
@@ -1227,19 +1924,10 @@ function drawVisualEffects() {
       continue;
     }
 
-    if (effect.kind === 'lightning') {
-      ctx.save();
-      ctx.strokeStyle = `rgba(255,228,121,${alpha})`;
-      ctx.shadowColor = 'rgba(255,228,121,0.65)';
-      ctx.shadowBlur = 9;
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.moveTo(effect.points[0].x, effect.points[0].y);
-      for (let i = 1; i < effect.points.length; i += 1) {
-        ctx.lineTo(effect.points[i].x, effect.points[i].y);
-      }
-      ctx.stroke();
-      ctx.restore();
+    if (effect.kind === 'lightning' || effect.kind === 'lightning_chain') {
+      const lineWidth = effect.kind === 'lightning_chain' ? 1.9 : 2.4;
+      const chainAlpha = effect.kind === 'lightning_chain' ? alpha * 0.84 : alpha;
+      drawLightningStroke(effect.points, chainAlpha, lineWidth);
     }
   }
 }
@@ -1272,6 +1960,7 @@ function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawMapBase();
   drawFireZones();
+  drawSelectedTowerRange();
   drawSlotsAndTowers();
   drawEnemies();
   drawVisualEffects();
@@ -1305,6 +1994,10 @@ function gameLoop(now) {
 
   render();
   updateHud();
+  if (persistenceReady && now >= nextPeriodicPersistAt) {
+    nextPeriodicPersistAt = now + PERIODIC_SAVE_MS;
+    queueProgressPersist(false);
+  }
 
   requestAnimationFrame(gameLoop);
 }
@@ -1324,7 +2017,12 @@ function pickSlotFromMouse(clientX, clientY) {
 }
 
 function loadSelectedMap() {
-  game.setMap(elMapSelect.value);
+  const mapRes = game.setMap(elMapSelect.value, { carryResources: true });
+  if (!mapRes.ok) {
+    elResult.textContent = mapRes.error;
+    elMapSelect.value = game.mapId;
+    return;
+  }
   selectedSlotId = null;
   fastForwardUntilMs = 0;
   slotPopoutNotice = '';
@@ -1332,6 +2030,7 @@ function loadSelectedMap() {
   buildStaticMapLayers();
   updateMapMeta();
   updateHud();
+  scheduleProgressPersist();
 }
 
 function triggerFastForwardWave() {
@@ -1350,10 +2049,13 @@ function maybeAutoAdvanceMap() {
     return;
   }
   const nextMapId = game.getNextMapId();
-  if (!nextMapId || !game.result.nextMapUnlocked) {
+  if (!nextMapId || !game.isMapUnlocked(nextMapId)) {
     return;
   }
-  game.setMap(nextMapId, { carryResources: true });
+  const mapRes = game.setMap(nextMapId, { carryResources: true });
+  if (!mapRes.ok) {
+    return;
+  }
   selectedSlotId = null;
   slotPopoutNotice = '';
   closeSlotPopout();
@@ -1362,6 +2064,7 @@ function maybeAutoAdvanceMap() {
   elMapSelect.value = game.mapId;
   buildStaticMapLayers();
   updateMapMeta();
+  scheduleProgressPersist();
 }
 
 function handleAutoContinue() {
@@ -1407,51 +2110,48 @@ document.addEventListener('pointerdown', (event) => {
 btnStartWave.addEventListener('click', () => {
   game.startNextWave();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleSpeed.addEventListener('click', () => {
   game.setSpeed(game.speed === 1 ? 2 : 1);
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnFastForwardWave.addEventListener('click', () => {
   triggerFastForwardWave();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleAutoContinue.addEventListener('click', () => {
   autoContinueEnabled = !autoContinueEnabled;
   handleAutoContinue();
   updateHud();
+  scheduleProgressPersist();
 });
 
 btnToggleReportPanel.addEventListener('click', () => {
   setPanelVisibility('report', !reportPanelVisible);
+  scheduleProgressPersist();
 });
 
 btnToggleCurvePanel.addEventListener('click', () => {
   setPanelVisibility('curve', !curvePanelVisible);
+  scheduleProgressPersist();
 });
 
 btnHideReportPanel.addEventListener('click', (event) => {
   event.stopPropagation();
   setPanelVisibility('report', false);
+  scheduleProgressPersist();
 });
 
 btnHideCurvePanel.addEventListener('click', (event) => {
   event.stopPropagation();
   setPanelVisibility('curve', false);
-});
-
-btnReset.addEventListener('click', () => {
-  game.reset();
-  selectedSlotId = null;
-  slotPopoutNotice = '';
-  closeSlotPopout();
-  visualEffects.length = 0;
-  fastForwardUntilMs = 0;
-  buildStaticMapLayers();
-  updateHud();
+  scheduleProgressPersist();
 });
 
 btnLoadMap.addEventListener('click', loadSelectedMap);
@@ -1461,6 +2161,7 @@ elCurveTower.addEventListener('change', () => {
   selectedCurveTowerId = elCurveTower.value;
   markCurveDirty();
   updateCurveVisualization(true);
+  scheduleProgressPersist();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -1486,12 +2187,33 @@ window.addEventListener('resize', () => {
   clampHudWindowsToViewport();
 });
 
-rebuildMapSelect();
-rebuildCurveTowerSelect();
-resizeCanvasToViewport();
-makeWindowDraggable(elResultWindow, elResultHandle);
-makeWindowDraggable(elCurveWindow, elCurveHandle);
-updatePanelButtons();
-updateMapMeta();
-updateHud();
-requestAnimationFrame(gameLoop);
+window.addEventListener('beforeunload', flushProgressOnUnload);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    flushProgressOnUnload();
+  }
+});
+
+async function bootstrap() {
+  rebuildMapSelect();
+  rebuildCurveTowerSelect();
+  makeWindowDraggable(elResultWindow, elResultHandle);
+  makeWindowDraggable(elCurveWindow, elCurveHandle);
+  updatePanelButtons();
+  updateMapMeta();
+  updateHud();
+
+  await hydrateProgress();
+
+  resizeCanvasToViewport();
+  clampHudWindowsToViewport();
+  updateMapMeta();
+  updateHud();
+
+  persistenceReady = true;
+  nextPeriodicPersistAt = performance.now() + PERIODIC_SAVE_MS;
+  queueProgressPersist(false);
+  requestAnimationFrame(gameLoop);
+}
+
+bootstrap();

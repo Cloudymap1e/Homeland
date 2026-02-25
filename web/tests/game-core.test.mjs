@@ -50,16 +50,21 @@ function addTower(game, towerId, level, distance) {
 
 test('build and upgrade deduct coins correctly', () => {
   const game = new HomelandGame();
+  const slotCost = game.getSlotActivationCost('s01');
   const level1Cost = TOWER_CONFIG.arrow.levels[0].cost;
   const level2Cost = TOWER_CONFIG.arrow.levels[1].cost;
 
+  const activateRes = game.activateSlot('s01');
+  assert.equal(activateRes.ok, true);
+  assert.equal(game.coins, game.mapConfig.startingCoins - slotCost);
+
   const buildRes = game.buildTower('s01', 'arrow');
   assert.equal(buildRes.ok, true);
-  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost);
+  assert.equal(game.coins, game.mapConfig.startingCoins - slotCost - level1Cost);
 
   const upRes = game.upgradeTower('s01');
   assert.equal(upRes.ok, true);
-  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost - level2Cost);
+  assert.equal(game.coins, game.mapConfig.startingCoins - slotCost - level1Cost - level2Cost);
 
   const tower = game.getTower('s01');
   assert.equal(tower.level, 2);
@@ -67,8 +72,12 @@ test('build and upgrade deduct coins correctly', () => {
 
 test('build and upgrade are allowed during active wave', () => {
   const game = new HomelandGame();
+  const slotCost = game.getSlotActivationCost('s01');
   const level1Cost = TOWER_CONFIG.arrow.levels[0].cost;
   const level2Cost = TOWER_CONFIG.arrow.levels[1].cost;
+
+  const activateRes = game.activateSlot('s01');
+  assert.equal(activateRes.ok, true);
 
   const startRes = game.startNextWave();
   assert.equal(startRes.ok, true);
@@ -80,8 +89,15 @@ test('build and upgrade are allowed during active wave', () => {
   const upRes = game.upgradeTower('s01');
   assert.equal(upRes.ok, true);
 
-  assert.equal(game.coins, game.mapConfig.startingCoins - level1Cost - level2Cost);
+  assert.equal(game.coins, game.mapConfig.startingCoins - slotCost - level1Cost - level2Cost);
   assert.equal(game.getTower('s01')?.level, 2);
+});
+
+test('slot must be activated before build is allowed', () => {
+  const game = new HomelandGame();
+  const buildRes = game.buildTower('s01', 'arrow');
+  assert.equal(buildRes.ok, false);
+  assert.equal(buildRes.error, 'Activate slot first.');
 });
 
 test('river-overlap slots are blocked for placement', () => {
@@ -209,23 +225,79 @@ test('all towers support 50 levels', () => {
 
 test('map switching resets state and applies selected map settings', () => {
   const game = new HomelandGame();
-  game.setMap('map_02_split_delta');
+  const locked = game.setMap('map_02_split_delta');
+  assert.equal(locked.ok, false);
+
+  game.completedMaps.add('map_01_river_bend');
+  game.xp = 3000;
+  game.unlockByCampaignProgress();
+  const setRes = game.setMap('map_02_split_delta');
+  assert.equal(setRes.ok, true);
 
   assert.equal(game.mapConfig.mapId, 'map_02_split_delta');
   assert.equal(game.state, 'build_phase');
   assert.equal(game.waveIndex, -1);
-  assert.equal(game.coins, game.mapConfig.startingCoins);
+  assert.equal(game.coins, 10000);
 });
 
 test('map switching can carry coins and xp for auto-continue', () => {
   const game = new HomelandGame();
+  game.completedMaps.add('map_01_river_bend');
+  game.xp = 2500;
+  game.unlockByCampaignProgress();
   game.coins = 5432;
   game.xp = 987;
 
-  game.setMap('map_02_split_delta', { carryResources: true });
+  const setRes = game.setMap('map_02_split_delta', { carryResources: true });
+  assert.equal(setRes.ok, true);
 
   assert.equal(game.mapConfig.mapId, 'map_02_split_delta');
   assert.equal(game.coins, 5432);
   assert.equal(game.xp, 987);
   assert.equal(game.getNextMapId(), 'map_03_marsh_maze');
+});
+
+test('state can export and import with active wave progress', () => {
+  const source = new HomelandGame({ mapId: 'map_02_split_delta' });
+  source.completedMaps.add('map_01_river_bend');
+  source.xp = 5000;
+  source.unlockByCampaignProgress();
+  source.setMap('map_02_split_delta', { carryResources: true });
+  const slotId = source.getBuildSlots()[0].id;
+  source.activateSlot(slotId);
+  source.buildTower(slotId, 'arrow');
+  source.startNextWave();
+  advance(source, 2.2, 0.05);
+
+  const payload = source.exportState();
+  const restored = new HomelandGame({ mapId: 'map_01_river_bend' });
+  const ok = restored.importState(payload);
+
+  assert.equal(ok, true);
+  assert.equal(restored.mapId, source.mapId);
+  assert.equal(restored.state, source.state);
+  assert.equal(restored.coins, source.coins);
+  assert.equal(restored.xp, source.xp);
+  assert.equal(restored.waveIndex, source.waveIndex);
+  assert.equal(restored.spawnQueue.length, source.spawnQueue.length);
+  assert.equal(restored.enemies.length, source.enemies.length);
+  assert.equal(restored.getTower(slotId)?.towerId, 'arrow');
+});
+
+test('importState safely ignores malformed entities', () => {
+  const game = new HomelandGame();
+  const ok = game.importState({
+    mapId: game.mapId,
+    towers: [
+      { slotId: 'unknown_slot', towerId: 'arrow', level: 2 },
+      { slotId: game.getBuildSlots()[0].id, towerId: 'bad_tower' },
+    ],
+    enemies: [
+      { id: 'e1', enemyType: 'not_real' },
+    ],
+  });
+
+  assert.equal(ok, true);
+  assert.equal(game.towers.size, 0);
+  assert.equal(game.enemies.length, 0);
 });

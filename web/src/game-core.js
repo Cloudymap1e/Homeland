@@ -4,7 +4,11 @@ const WORLD_SCALE = 10;
 const CHAIN_RADIUS = 2.6;
 const MAP_RENDER_WIDTH = 1100;
 const MAP_RENDER_HEIGHT = 680;
-const SLOT_RIVER_CLEARANCE_PX = 16;
+const DEFAULT_SLOT_RIVER_CLEARANCE_PX = 12;
+const GAME_PERSISTENCE_VERSION = 1;
+const VALID_GAME_STATES = new Set(['build_phase', 'wave_running', 'wave_result', 'map_result']);
+const MAP_ORDER = Object.keys(MAPS);
+const MAP_INDEX = new Map(MAP_ORDER.map((mapId, index) => [mapId, index]));
 
 function distance(a, b) {
   const dx = a.x - b.x;
@@ -66,10 +70,13 @@ function slotToRouteDistancePx(slot, routes) {
 function partitionBuildSlots(mapConfig) {
   const buildable = [];
   const blocked = [];
+  const clearancePx = Number.isFinite(mapConfig.slotRiverClearancePx)
+    ? Math.max(0, mapConfig.slotRiverClearancePx)
+    : DEFAULT_SLOT_RIVER_CLEARANCE_PX;
 
   for (const slot of mapConfig.buildSlots) {
     const slotDistance = slotToRouteDistancePx(slot, mapConfig.routes);
-    if (slotDistance < SLOT_RIVER_CLEARANCE_PX) {
+    if (slotDistance < clearancePx) {
       blocked.push(slot);
       continue;
     }
@@ -120,10 +127,26 @@ function pickWeightedIndex(weights) {
   return valid.length - 1;
 }
 
+function clampNumber(value, fallback, min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+function clonePlainObject(value, fallback = null) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return fallback;
+  }
+  return { ...value };
+}
+
 export class HomelandGame {
   constructor(options = {}) {
-    const mapId = options.mapId || DEFAULT_MAP_ID;
-    this.loadMap(mapId);
+    this.unlockedMaps = new Set([DEFAULT_MAP_ID]);
+    this.completedMaps = new Set();
+    const requestedMapId = options.mapId || DEFAULT_MAP_ID;
+    this.loadMap(this.isMapUnlocked(requestedMapId) ? requestedMapId : DEFAULT_MAP_ID);
     this.reset();
   }
 
@@ -148,6 +171,10 @@ export class HomelandGame {
     const previousCoins = this.coins ?? this.mapConfig.startingCoins;
     const previousXp = this.xp ?? this.mapConfig.startingXp;
     const resetMapId = options.mapId || this.mapId;
+    if (options.resetCampaignProgress) {
+      this.unlockedMaps = new Set([DEFAULT_MAP_ID]);
+      this.completedMaps = new Set();
+    }
     if (resetMapId !== this.mapId) {
       this.loadMap(resetMapId);
     }
@@ -163,6 +190,7 @@ export class HomelandGame {
     this.enemies = [];
     this.nextEnemyId = 1;
     this.towers = new Map();
+    this.paidSlots = new Set();
     this.fireZones = [];
     this.lastAttacks = [];
     this.result = null;
@@ -179,7 +207,14 @@ export class HomelandGame {
   }
 
   setMap(mapId, options = {}) {
-    this.reset({ mapId, ...options });
+    const targetMapId = MAPS[mapId] ? mapId : DEFAULT_MAP_ID;
+    const ignoreUnlock = Boolean(options.ignoreUnlock);
+    if (!ignoreUnlock && !this.isMapUnlocked(targetMapId)) {
+      return { ok: false, error: 'Map is locked. Clear previous maps first.' };
+    }
+    const carryResources = options.carryResources !== false;
+    this.reset({ mapId: targetMapId, carryResources });
+    return { ok: true };
   }
 
   getNextMapId() {
@@ -188,6 +223,287 @@ export class HomelandGame {
       return null;
     }
     return nextMapId;
+  }
+
+  areAllPreviousMapsCompleted(mapId) {
+    const mapIndex = MAP_INDEX.get(mapId);
+    if (!Number.isInteger(mapIndex) || mapIndex <= 0) {
+      return true;
+    }
+    for (let i = 0; i < mapIndex; i += 1) {
+      if (!this.completedMaps.has(MAP_ORDER[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  isMapUnlocked(mapId) {
+    if (!MAPS[mapId]) {
+      return false;
+    }
+    if (mapId === DEFAULT_MAP_ID) {
+      return true;
+    }
+    return this.unlockedMaps.has(mapId) && this.areAllPreviousMapsCompleted(mapId);
+  }
+
+  isMapCompleted(mapId) {
+    return this.completedMaps.has(mapId);
+  }
+
+  getUnlockedMapIds() {
+    return MAP_ORDER.filter((mapId) => this.isMapUnlocked(mapId));
+  }
+
+  getCompletedMapIds() {
+    return MAP_ORDER.filter((mapId) => this.completedMaps.has(mapId));
+  }
+
+  getSlotPlacementCost(slotId) {
+    return this.getSlotActivationCost(slotId);
+  }
+
+  isSlotActivated(slotId) {
+    return this.paidSlots.has(slotId);
+  }
+
+  getSlotActivationCost(slotId) {
+    const slot = this.buildSlotsById.get(slotId);
+    if (!slot || this.paidSlots.has(slotId)) {
+      return 0;
+    }
+    if (Number.isFinite(slot.activationCost)) {
+      return Math.max(0, Math.round(slot.activationCost));
+    }
+    const mapCost = this.mapConfig.slotActivationCost;
+    if (!Number.isFinite(mapCost)) {
+      return 0;
+    }
+    return Math.max(0, Math.round(mapCost));
+  }
+
+  activateSlot(slotId) {
+    if (!['build_phase', 'wave_running', 'wave_result'].includes(this.state)) {
+      return { ok: false, error: 'Cannot activate slot in current state.' };
+    }
+    const slot = this.buildSlotsById.get(slotId);
+    if (!slot) {
+      if (this.blockedBuildSlotsById.has(slotId)) {
+        return { ok: false, error: 'Cannot activate slot in river.' };
+      }
+      return { ok: false, error: 'Unknown slot.' };
+    }
+    if (this.paidSlots.has(slotId)) {
+      return { ok: false, error: 'Slot already activated.' };
+    }
+    const activationCost = this.getSlotActivationCost(slotId);
+    if (this.coins < activationCost) {
+      return { ok: false, error: 'Insufficient coins.' };
+    }
+    this.coins -= activationCost;
+    this.paidSlots.add(slotId);
+    return { ok: true, cost: activationCost };
+  }
+
+  unlockByCampaignProgress() {
+    this.unlockedMaps.add(DEFAULT_MAP_ID);
+    for (const mapId of this.completedMaps) {
+      if (MAPS[mapId]) {
+        this.unlockedMaps.add(mapId);
+      }
+    }
+    for (let i = 1; i < MAP_ORDER.length; i += 1) {
+      const previousMapId = MAP_ORDER[i - 1];
+      const currentMapId = MAP_ORDER[i];
+      const minXp = Number(MAPS[previousMapId].unlockRequirement?.minXp) || 0;
+      if (this.completedMaps.has(previousMapId) && this.areAllPreviousMapsCompleted(currentMapId) && this.xp >= minXp) {
+        this.unlockedMaps.add(currentMapId);
+      }
+    }
+  }
+
+  unlockNextMapIfEligible() {
+    const nextMapId = this.getNextMapId();
+    if (!nextMapId) {
+      return false;
+    }
+    if (!this.areAllPreviousMapsCompleted(nextMapId)) {
+      return false;
+    }
+    const minXp = Number(this.mapConfig.unlockRequirement?.minXp) || 0;
+    if (this.xp < minXp) {
+      return false;
+    }
+    const alreadyUnlocked = this.isMapUnlocked(nextMapId);
+    this.unlockedMaps.add(nextMapId);
+    return !alreadyUnlocked;
+  }
+
+  exportState() {
+    return {
+      version: GAME_PERSISTENCE_VERSION,
+      mapId: this.mapId,
+      unlockedMapIds: this.getUnlockedMapIds(),
+      completedMapIds: this.getCompletedMapIds(),
+      paidSlotIds: [...this.paidSlots],
+      state: this.state,
+      coins: this.coins,
+      xp: this.xp,
+      waveIndex: this.waveIndex,
+      speed: this.speed,
+      spawnCooldown: this.spawnCooldown,
+      spawnQueue: [...this.spawnQueue],
+      enemies: this.enemies.map((enemy) => ({ ...enemy })),
+      nextEnemyId: this.nextEnemyId,
+      towers: Array.from(this.towers.values()).map((tower) => ({ ...tower })),
+      fireZones: this.fireZones.map((zone) => ({ ...zone })),
+      result: this.result ? { ...this.result } : null,
+      stats: { ...this.stats },
+    };
+  }
+
+  importState(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const mapId = typeof payload.mapId === 'string' && payload.mapId in MAPS
+      ? payload.mapId
+      : this.mapId;
+    const unlockedMapIds = Array.isArray(payload.unlockedMapIds)
+      ? payload.unlockedMapIds.filter((map) => typeof map === 'string' && MAPS[map])
+      : [];
+    const completedMapIds = Array.isArray(payload.completedMapIds)
+      ? payload.completedMapIds.filter((map) => typeof map === 'string' && MAPS[map])
+      : [];
+    const paidSlotIds = Array.isArray(payload.paidSlotIds)
+      ? payload.paidSlotIds.filter((slotId) => typeof slotId === 'string')
+      : [];
+    if (MAPS[mapId]) {
+      unlockedMapIds.push(mapId);
+    }
+    this.unlockedMaps = new Set([DEFAULT_MAP_ID, ...unlockedMapIds]);
+    this.completedMaps = new Set(completedMapIds);
+    this.reset({ mapId: this.isMapUnlocked(mapId) ? mapId : DEFAULT_MAP_ID });
+
+    if (typeof payload.state === 'string' && VALID_GAME_STATES.has(payload.state)) {
+      this.state = payload.state;
+    }
+
+    this.coins = clampNumber(payload.coins, this.coins);
+    this.xp = clampNumber(payload.xp, this.xp, 0);
+    this.waveIndex = clampNumber(payload.waveIndex, this.waveIndex, -1, this.waves.length - 1);
+    this.speed = clampNumber(payload.speed, this.speed, 0.25, 4);
+    this.spawnCooldown = clampNumber(payload.spawnCooldown, this.spawnCooldown, 0);
+    this.nextEnemyId = Math.max(1, Math.floor(clampNumber(payload.nextEnemyId, this.nextEnemyId, 1)));
+
+    if (Array.isArray(payload.spawnQueue)) {
+      this.spawnQueue = payload.spawnQueue.filter(
+        (enemyType) => typeof enemyType === 'string' && enemyType in ENEMIES
+      );
+    }
+
+    if (Array.isArray(payload.towers)) {
+      this.towers.clear();
+      for (const tower of payload.towers) {
+        if (!tower || typeof tower !== 'object') {
+          continue;
+        }
+        const slotId = tower.slotId;
+        const towerId = tower.towerId;
+        if (typeof slotId !== 'string' || !this.buildSlotsById.has(slotId)) {
+          continue;
+        }
+        if (typeof towerId !== 'string' || !(towerId in TOWER_CONFIG)) {
+          continue;
+        }
+        const slot = this.buildSlotsById.get(slotId);
+        const maxLevel = TOWER_CONFIG[towerId].levels.length;
+        const level = Math.floor(clampNumber(tower.level, 1, 1, maxLevel));
+        this.towers.set(slotId, {
+          id: typeof tower.id === 'string' ? tower.id : `tower_${slotId}`,
+          towerId,
+          level,
+          slotId,
+          x: slot.x,
+          y: slot.y,
+          cooldown: clampNumber(tower.cooldown, 0, 0),
+        });
+      }
+    }
+
+    this.paidSlots = new Set(
+      paidSlotIds.filter((slotId) => this.buildSlotsById.has(slotId))
+    );
+    for (const tower of this.towers.values()) {
+      this.paidSlots.add(tower.slotId);
+    }
+
+    if (Array.isArray(payload.enemies)) {
+      this.enemies = [];
+      for (const enemy of payload.enemies) {
+        if (!enemy || typeof enemy !== 'object') {
+          continue;
+        }
+        if (typeof enemy.enemyType !== 'string' || !(enemy.enemyType in ENEMIES)) {
+          continue;
+        }
+        const routeIndex = Math.floor(
+          clampNumber(enemy.routeIndex, 0, 0, Math.max(0, this.routeInfos.length - 1))
+        );
+        const routeInfo = this.routeInfos[routeIndex];
+        const routeLength = routeInfo ? routeInfo.pathInfo.length : 0;
+        const safeEnemy = {
+          id: typeof enemy.id === 'string' ? enemy.id : `enemy_${this.nextEnemyId}`,
+          enemyType: enemy.enemyType,
+          hp: clampNumber(enemy.hp, ENEMIES[enemy.enemyType].hp, 0),
+          maxHp: clampNumber(enemy.maxHp, ENEMIES[enemy.enemyType].hp, 1),
+          speed: clampNumber(enemy.speed, ENEMIES[enemy.enemyType].speed, 0),
+          coinReward: Math.round(clampNumber(enemy.coinReward, ENEMIES[enemy.enemyType].coinReward, 0)),
+          xpReward: Math.round(clampNumber(enemy.xpReward, ENEMIES[enemy.enemyType].xpReward, 0)),
+          distance: clampNumber(enemy.distance, 0, 0, routeLength),
+          routeIndex,
+          routeLength,
+          burnDps: clampNumber(enemy.burnDps, 0, 0),
+          burnDurationLeft: clampNumber(enemy.burnDurationLeft, 0, 0),
+          slowPercent: clampNumber(enemy.slowPercent, 0, 0, 95),
+          slowDurationLeft: clampNumber(enemy.slowDurationLeft, 0, 0),
+          shockDurationLeft: clampNumber(enemy.shockDurationLeft, 0, 0),
+        };
+        if (safeEnemy.maxHp < safeEnemy.hp) {
+          safeEnemy.maxHp = safeEnemy.hp;
+        }
+        this.enemies.push(safeEnemy);
+      }
+    }
+
+    if (Array.isArray(payload.fireZones)) {
+      this.fireZones = payload.fireZones
+        .filter((zone) => zone && typeof zone === 'object')
+        .map((zone) => ({
+          x: clampNumber(zone.x, 0),
+          y: clampNumber(zone.y, 0),
+          radius: clampNumber(zone.radius, 1, 0),
+          dps: clampNumber(zone.dps, 0, 0),
+          durationLeft: clampNumber(zone.durationLeft, 0, 0),
+        }))
+        .filter((zone) => zone.durationLeft > 0);
+    }
+
+    this.result = clonePlainObject(payload.result, null);
+
+    const stats = clonePlainObject(payload.stats, {});
+    this.stats = {
+      spawned: Math.max(0, Math.floor(clampNumber(stats.spawned, this.stats.spawned, 0))),
+      killed: Math.max(0, Math.floor(clampNumber(stats.killed, this.stats.killed, 0))),
+      leaked: Math.max(0, Math.floor(clampNumber(stats.leaked, this.stats.leaked, 0))),
+    };
+
+    this.lastAttacks = [];
+    this.events = [];
+    this.unlockByCampaignProgress();
+    return true;
   }
 
   buildTower(slotId, towerId) {
@@ -201,11 +517,6 @@ export class HomelandGame {
     if (!towerConfig) {
       return { ok: false, error: 'Unknown tower.' };
     }
-    const cost = towerConfig.levels[0].cost;
-    if (this.coins < cost) {
-      return { ok: false, error: 'Insufficient coins.' };
-    }
-
     const slot = this.buildSlotsById.get(slotId);
     if (!slot) {
       if (this.blockedBuildSlotsById.has(slotId)) {
@@ -213,8 +524,15 @@ export class HomelandGame {
       }
       return { ok: false, error: 'Unknown slot.' };
     }
+    if (!this.paidSlots.has(slotId)) {
+      return { ok: false, error: 'Activate slot first.' };
+    }
+    const towerCost = towerConfig.levels[0].cost;
+    if (this.coins < towerCost) {
+      return { ok: false, error: 'Insufficient coins.' };
+    }
 
-    this.coins -= cost;
+    this.coins -= towerCost;
     this.towers.set(slotId, {
       id: `tower_${slotId}`,
       towerId,
@@ -225,7 +543,14 @@ export class HomelandGame {
       cooldown: 0,
     });
 
-    return { ok: true };
+    return {
+      ok: true,
+      cost: {
+        tower: towerCost,
+        slot: 0,
+        total: towerCost,
+      },
+    };
   }
 
   upgradeTower(slotId) {
@@ -326,6 +651,7 @@ export class HomelandGame {
       burnDurationLeft: 0,
       slowPercent: 0,
       slowDurationLeft: 0,
+      shockDurationLeft: 0,
     });
     this.nextEnemyId += 1;
     this.stats.spawned += 1;
@@ -366,6 +692,9 @@ export class HomelandGame {
         if (enemy.slowDurationLeft === 0) {
           enemy.slowPercent = 0;
         }
+      }
+      if (enemy.shockDurationLeft > 0) {
+        enemy.shockDurationLeft = Math.max(0, enemy.shockDurationLeft - dt);
       }
     }
 
@@ -419,11 +748,14 @@ export class HomelandGame {
       });
 
       if (cfg.effectType === 'lightning') {
+        const shockDuration = levelCfg.shockVisualDuration || 0.58;
+        target.shockDurationLeft = Math.max(target.shockDurationLeft || 0, shockDuration);
         this.applyLightningChain(
           target,
           levelCfg.damage,
           levelCfg.chainFalloff || 0,
-          levelCfg.chainCount || 0
+          levelCfg.chainCount || 0,
+          shockDuration
         );
       }
     }
@@ -431,6 +763,11 @@ export class HomelandGame {
 
   applyFireball(tower, target, levelCfg) {
     target.hp -= levelCfg.damage;
+    const burnDps = levelCfg.burnDps || 0;
+    if (burnDps > 0) {
+      target.burnDps = Math.max(target.burnDps || 0, burnDps);
+      target.burnDurationLeft = Math.max(target.burnDurationLeft || 0, levelCfg.burnDuration || 0);
+    }
     const targetPos = this.getEnemyWorldPosition(target);
     this.lastAttacks.push({
       from: { x: tower.x, y: tower.y },
@@ -510,7 +847,7 @@ export class HomelandGame {
     return inRange.slice(0, Math.max(1, maxTargets));
   }
 
-  applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount) {
+  applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount, shockDuration = 0) {
     if (chainCount <= 0) {
       return;
     }
@@ -534,6 +871,14 @@ export class HomelandGame {
       }
       const chainDamage = baseDamage * (1 - falloffPercent / 100);
       candidate.enemy.hp -= chainDamage;
+      if (shockDuration > 0) {
+        candidate.enemy.shockDurationLeft = Math.max(candidate.enemy.shockDurationLeft || 0, shockDuration);
+      }
+      this.lastAttacks.push({
+        from: sourcePos,
+        to: this.getEnemyWorldPosition(candidate.enemy),
+        effectType: 'lightning_chain',
+      });
       hits += 1;
     }
   }
@@ -577,12 +922,22 @@ export class HomelandGame {
     this.state = 'wave_result';
 
     if (this.waveIndex === this.waves.length - 1) {
+      const reward = this.mapConfig.mapClearReward || {};
+      const rewardCoins = Math.max(0, Math.round(Number(reward.coins) || 0));
+      const rewardXp = Math.max(0, Math.round(Number(reward.xp) || 0));
+      this.coins += rewardCoins;
+      this.xp += rewardXp;
       this.xp += PROGRESSION.xpMapClear + (this.mapConfig.xpMapBonus || 0);
+      this.completedMaps.add(this.mapConfig.mapId);
+      this.unlockedMaps.add(this.mapConfig.mapId);
+      const nextMapUnlocked = this.unlockNextMapIfEligible();
       this.state = 'map_result';
       this.result = {
         victory: true,
         mapId: this.mapConfig.mapId,
-        nextMapUnlocked: this.xp >= this.mapConfig.unlockRequirement.minXp,
+        nextMapUnlocked,
+        mapRewardCoins: rewardCoins,
+        mapRewardXp: rewardXp,
       };
     } else {
       this.state = 'build_phase';
@@ -600,10 +955,14 @@ export class HomelandGame {
       totalWaves: this.waves.length,
       boatsLeft: this.spawnQueue.length + this.enemies.length,
       result: this.result,
-      nextMapUnlocked: this.xp >= this.mapConfig.unlockRequirement.minXp,
+      nextMapUnlocked: this.getNextMapId() ? this.isMapUnlocked(this.getNextMapId()) : false,
       leaked: this.stats.leaked,
       killed: this.stats.killed,
       spawned: this.stats.spawned,
+      unlockedMapIds: this.getUnlockedMapIds(),
+      completedMapIds: this.getCompletedMapIds(),
+      paidSlotIds: [...this.paidSlots],
+      slotActivationCost: this.mapConfig.slotActivationCost || 0,
     };
   }
 

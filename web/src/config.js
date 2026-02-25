@@ -80,6 +80,8 @@ function createFireLevels() {
       fireballDps: intFromAnchors(level, [40, 56, 84, 118, 162, 214]),
       fireballDuration: 3.0,
       fireballRadius: floatFromAnchors(level, [0.7, 0.78, 0.86, 0.94, 1.03, 1.12]),
+      burnDps: intFromAnchors(level, [18, 27, 40, 56, 77, 102]),
+      burnDuration: floatFromAnchors(level, [2.5, 2.7, 2.95, 3.2, 3.45, 3.75]),
     });
   }
   return levels;
@@ -136,6 +138,7 @@ function createLightningLevels() {
       attackSpeed: floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5]),
       chainCount: lightningChainsByLevel(level),
       chainFalloff: intFromAnchors(level, [38, 35, 32, 28, 24, 20]),
+      shockVisualDuration: floatFromAnchors(level, [0.58, 0.66, 0.74, 0.82, 0.9, 1.0]),
     });
   }
   return levels;
@@ -223,6 +226,53 @@ const map03Waves = createWavePlan({
   surgeBoost: 3,
 });
 
+const map04Waves = createWavePlan({
+  totalWaves: 22,
+  spawnStart: 0.84,
+  spawnFloor: 0.3,
+  routeWeights: [0.23, 0.24, 0.2, 0.18, 0.15],
+  baseCounts: { scout: 7, raider: 6, barge: 2, juggernaut: 1 },
+  growth: { scout: 0.52, raider: 0.45, barge: 0.24, juggernaut: 0.11 },
+  surgeEvery: 3,
+  surgeBoost: 3,
+});
+
+const PASS_RUN_TARGETS_BY_MAP_INDEX = [30, 50, 60, 90, 100, 120];
+const MC_PASS_RATE_TARGETS_BY_MAP_INDEX = [0.9, 0.85, 0.8, 0.77, 0.75, 0.7];
+const FAIL_PENALTY_RUN_EQUIVALENT = 2;
+const RETENTION_PROBE_RUNS = 100;
+const PASS_RATE_PROBE_RUNS = 1000;
+
+function passRunTargetForMapIndex(mapIndex) {
+  if (mapIndex < PASS_RUN_TARGETS_BY_MAP_INDEX.length) {
+    return PASS_RUN_TARGETS_BY_MAP_INDEX[mapIndex];
+  }
+  const lastTarget = PASS_RUN_TARGETS_BY_MAP_INDEX[PASS_RUN_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = PASS_RUN_TARGETS_BY_MAP_INDEX[PASS_RUN_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const growthStep = Math.max(10, lastTarget - previousTarget);
+  return lastTarget + growthStep * (mapIndex - PASS_RUN_TARGETS_BY_MAP_INDEX.length + 1);
+}
+
+function passRateTargetForMapIndex(mapIndex) {
+  if (mapIndex < MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length) {
+    return MC_PASS_RATE_TARGETS_BY_MAP_INDEX[mapIndex];
+  }
+  const lastTarget = MC_PASS_RATE_TARGETS_BY_MAP_INDEX[MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length - 1];
+  const previousTarget = MC_PASS_RATE_TARGETS_BY_MAP_INDEX[MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length - 2] || lastTarget;
+  const reductionStep = Math.max(0.02, previousTarget - lastTarget);
+  return Math.max(0.5, roundTo(lastTarget - reductionStep * (mapIndex - MC_PASS_RATE_TARGETS_BY_MAP_INDEX.length + 1), 2));
+}
+
+function createPassCriteria(mapIndex) {
+  return {
+    unlockRunsTarget: passRunTargetForMapIndex(mapIndex),
+    failRunPenaltyEquivalent: FAIL_PENALTY_RUN_EQUIVALENT,
+    retentionProbeRuns: RETENTION_PROBE_RUNS,
+    passRateProbeRuns: PASS_RATE_PROBE_RUNS,
+    mcPassRateTarget: passRateTargetForMapIndex(mapIndex),
+  };
+}
+
 export const MAPS = {
   map_01_river_bend: {
     mapId: 'map_01_river_bend',
@@ -230,6 +280,11 @@ export const MAPS = {
     seed: 101,
     startingCoins: 10000,
     startingXp: 0,
+    slotActivationCost: 45,
+    mapClearReward: { coins: 600, xp: 80 },
+    passCriteria: createPassCriteria(0),
+    slotRiverClearancePx: 13,
+    riverVisual: { bankWidth: 58, waterWidth: 42, highlightWidth: 14, laneDashWidth: 2.2 },
     leakPenalty: { coins: 235, xp: 8 },
     unlockRequirement: { nextMap: 'map_02_split_delta', minXp: 2200 },
     enemyScale: { hp: 1.18, speed: 1.08, rewards: 0.74 },
@@ -287,6 +342,11 @@ export const MAPS = {
     seed: 209,
     startingCoins: 12000,
     startingXp: 0,
+    slotActivationCost: 65,
+    mapClearReward: { coins: 900, xp: 120 },
+    passCriteria: createPassCriteria(1),
+    slotRiverClearancePx: 13,
+    riverVisual: { bankWidth: 56, waterWidth: 40, highlightWidth: 13, laneDashWidth: 2.1 },
     leakPenalty: { coins: 235, xp: 10 },
     unlockRequirement: { nextMap: 'map_03_marsh_maze', minXp: 3600 },
     enemyScale: { hp: 1.2, speed: 1.06, rewards: 0.82 },
@@ -358,84 +418,227 @@ export const MAPS = {
     seed: 317,
     startingCoins: 19000,
     startingXp: 0,
+    slotActivationCost: 85,
+    mapClearReward: { coins: 1350, xp: 180 },
+    passCriteria: createPassCriteria(2),
+    slotRiverClearancePx: 12,
+    riverVisual: { bankWidth: 54, waterWidth: 38, highlightWidth: 12, laneDashWidth: 2.0 },
     leakPenalty: { coins: 275, xp: 14 },
-    unlockRequirement: { nextMap: 'map_04_future', minXp: 6200 },
-    enemyScale: { hp: 1.27, speed: 1.09, rewards: 0.81 },
+    unlockRequirement: { nextMap: 'map_04_tide_lock', minXp: 6200 },
+    enemyScale: { hp: 1.29, speed: 1.1, rewards: 0.79 },
     xpWaveBonus: 28,
     xpMapBonus: 460,
     routes: [
       {
         id: 'north_channel',
         waypoints: [
-          { x: 0.03, y: 0.57 },
-          { x: 0.12, y: 0.45 },
-          { x: 0.25, y: 0.33 },
-          { x: 0.42, y: 0.27 },
-          { x: 0.58, y: 0.23 },
-          { x: 0.78, y: 0.22 },
+          { x: 0.03, y: 0.58 },
+          { x: 0.1, y: 0.47 },
+          { x: 0.18, y: 0.39 },
+          { x: 0.27, y: 0.32 },
+          { x: 0.37, y: 0.28 },
+          { x: 0.48, y: 0.25 },
+          { x: 0.6, y: 0.23 },
+          { x: 0.72, y: 0.22 },
+          { x: 0.84, y: 0.21 },
           { x: 0.96, y: 0.19 },
         ],
       },
       {
         id: 'center_channel',
         waypoints: [
-          { x: 0.03, y: 0.57 },
-          { x: 0.16, y: 0.55 },
-          { x: 0.28, y: 0.5 },
-          { x: 0.4, y: 0.47 },
-          { x: 0.57, y: 0.44 },
-          { x: 0.74, y: 0.42 },
+          { x: 0.03, y: 0.58 },
+          { x: 0.11, y: 0.56 },
+          { x: 0.21, y: 0.53 },
+          { x: 0.32, y: 0.5 },
+          { x: 0.43, y: 0.47 },
+          { x: 0.55, y: 0.44 },
+          { x: 0.67, y: 0.42 },
+          { x: 0.8, y: 0.41 },
+          { x: 0.9, y: 0.41 },
           { x: 0.96, y: 0.4 },
         ],
       },
       {
         id: 'south_wide',
         waypoints: [
-          { x: 0.03, y: 0.57 },
-          { x: 0.13, y: 0.69 },
-          { x: 0.28, y: 0.78 },
-          { x: 0.47, y: 0.74 },
-          { x: 0.65, y: 0.66 },
-          { x: 0.82, y: 0.56 },
+          { x: 0.03, y: 0.58 },
+          { x: 0.09, y: 0.67 },
+          { x: 0.19, y: 0.74 },
+          { x: 0.31, y: 0.77 },
+          { x: 0.44, y: 0.74 },
+          { x: 0.56, y: 0.69 },
+          { x: 0.68, y: 0.63 },
+          { x: 0.8, y: 0.55 },
+          { x: 0.88, y: 0.48 },
           { x: 0.96, y: 0.4 },
         ],
       },
       {
         id: 'deep_detour',
         waypoints: [
-          { x: 0.03, y: 0.57 },
-          { x: 0.09, y: 0.78 },
-          { x: 0.2, y: 0.89 },
-          { x: 0.39, y: 0.88 },
-          { x: 0.56, y: 0.8 },
-          { x: 0.74, y: 0.66 },
+          { x: 0.03, y: 0.58 },
+          { x: 0.06, y: 0.73 },
+          { x: 0.13, y: 0.85 },
+          { x: 0.24, y: 0.91 },
+          { x: 0.37, y: 0.91 },
+          { x: 0.5, y: 0.86 },
+          { x: 0.62, y: 0.79 },
+          { x: 0.74, y: 0.69 },
+          { x: 0.86, y: 0.55 },
           { x: 0.96, y: 0.4 },
         ],
       },
     ],
-    defaultRouteWeights: [0.31, 0.36, 0.18, 0.15],
+    defaultRouteWeights: [0.28, 0.3, 0.23, 0.19],
     buildSlots: [
-      { id: 's01', x: 0.07, y: 0.37 },
-      { id: 's02', x: 0.09, y: 0.69 },
-      { id: 's03', x: 0.16, y: 0.29 },
-      { id: 's04', x: 0.19, y: 0.63 },
-      { id: 's05', x: 0.26, y: 0.24 },
-      { id: 's06', x: 0.3, y: 0.58 },
-      { id: 's07', x: 0.37, y: 0.21 },
-      { id: 's08', x: 0.41, y: 0.55 },
-      { id: 's09', x: 0.5, y: 0.19 },
-      { id: 's10', x: 0.53, y: 0.53 },
-      { id: 's11', x: 0.62, y: 0.19 },
-      { id: 's12', x: 0.65, y: 0.52 },
-      { id: 's13', x: 0.74, y: 0.2 },
-      { id: 's14', x: 0.77, y: 0.51 },
-      { id: 's15', x: 0.84, y: 0.23 },
-      { id: 's16', x: 0.87, y: 0.5 },
-      { id: 's17', x: 0.93, y: 0.27 },
-      { id: 's18', x: 0.94, y: 0.48 },
+      { id: 's01', x: 0.06, y: 0.36 },
+      { id: 's02', x: 0.08, y: 0.7 },
+      { id: 's03', x: 0.13, y: 0.27 },
+      { id: 's04', x: 0.16, y: 0.61 },
+      { id: 's05', x: 0.2, y: 0.84 },
+      { id: 's06', x: 0.25, y: 0.23 },
+      { id: 's07', x: 0.29, y: 0.57 },
+      { id: 's08', x: 0.34, y: 0.84 },
+      { id: 's09', x: 0.38, y: 0.2 },
+      { id: 's10', x: 0.43, y: 0.52 },
+      { id: 's11', x: 0.47, y: 0.81 },
+      { id: 's12', x: 0.53, y: 0.19 },
+      { id: 's13', x: 0.58, y: 0.5 },
+      { id: 's14', x: 0.62, y: 0.76 },
+      { id: 's15', x: 0.68, y: 0.18 },
+      { id: 's16', x: 0.73, y: 0.48 },
+      { id: 's17', x: 0.78, y: 0.73 },
+      { id: 's18', x: 0.84, y: 0.19 },
+      { id: 's19', x: 0.89, y: 0.44 },
+      { id: 's20', x: 0.93, y: 0.62 },
     ],
     waves: map03Waves,
     fleetTarget: fleetCount(map03Waves),
+  },
+  map_04_tide_lock: {
+    mapId: 'map_04_tide_lock',
+    name: 'Map 4 - Tide Lock',
+    seed: 431,
+    startingCoins: 23000,
+    startingXp: 0,
+    slotActivationCost: 88,
+    mapClearReward: { coins: 1800, xp: 240 },
+    passCriteria: createPassCriteria(3),
+    slotRiverClearancePx: 12,
+    riverVisual: { bankWidth: 50, waterWidth: 35, highlightWidth: 11, laneDashWidth: 1.8 },
+    leakPenalty: { coins: 320, xp: 18 },
+    unlockRequirement: { nextMap: null, minXp: 9200 },
+    enemyScale: { hp: 1.38, speed: 1.12, rewards: 0.78 },
+    xpWaveBonus: 34,
+    xpMapBonus: 620,
+    routes: [
+      {
+        id: 'high_tide',
+        waypoints: [
+          { x: 0.02, y: 0.63 },
+          { x: 0.08, y: 0.54 },
+          { x: 0.16, y: 0.43 },
+          { x: 0.26, y: 0.34 },
+          { x: 0.37, y: 0.28 },
+          { x: 0.5, y: 0.24 },
+          { x: 0.62, y: 0.2 },
+          { x: 0.74, y: 0.17 },
+          { x: 0.86, y: 0.16 },
+          { x: 0.96, y: 0.15 },
+        ],
+      },
+      {
+        id: 'ridge_cut',
+        waypoints: [
+          { x: 0.02, y: 0.63 },
+          { x: 0.11, y: 0.61 },
+          { x: 0.22, y: 0.56 },
+          { x: 0.33, y: 0.5 },
+          { x: 0.44, y: 0.45 },
+          { x: 0.56, y: 0.41 },
+          { x: 0.68, y: 0.37 },
+          { x: 0.8, y: 0.34 },
+          { x: 0.9, y: 0.32 },
+          { x: 0.96, y: 0.31 },
+        ],
+      },
+      {
+        id: 'flooded_gate',
+        waypoints: [
+          { x: 0.02, y: 0.63 },
+          { x: 0.09, y: 0.7 },
+          { x: 0.2, y: 0.75 },
+          { x: 0.32, y: 0.73 },
+          { x: 0.44, y: 0.67 },
+          { x: 0.56, y: 0.6 },
+          { x: 0.68, y: 0.52 },
+          { x: 0.79, y: 0.44 },
+          { x: 0.89, y: 0.37 },
+          { x: 0.96, y: 0.31 },
+        ],
+      },
+      {
+        id: 'mangrove_loop',
+        waypoints: [
+          { x: 0.02, y: 0.63 },
+          { x: 0.06, y: 0.76 },
+          { x: 0.13, y: 0.86 },
+          { x: 0.24, y: 0.92 },
+          { x: 0.37, y: 0.91 },
+          { x: 0.5, y: 0.86 },
+          { x: 0.62, y: 0.78 },
+          { x: 0.74, y: 0.67 },
+          { x: 0.85, y: 0.52 },
+          { x: 0.96, y: 0.31 },
+        ],
+      },
+      {
+        id: 'deep_reed',
+        waypoints: [
+          { x: 0.02, y: 0.63 },
+          { x: 0.05, y: 0.82 },
+          { x: 0.1, y: 0.93 },
+          { x: 0.18, y: 0.96 },
+          { x: 0.31, y: 0.94 },
+          { x: 0.44, y: 0.87 },
+          { x: 0.57, y: 0.76 },
+          { x: 0.69, y: 0.62 },
+          { x: 0.81, y: 0.46 },
+          { x: 0.9, y: 0.36 },
+          { x: 0.96, y: 0.31 },
+        ],
+      },
+    ],
+    defaultRouteWeights: [0.23, 0.24, 0.2, 0.18, 0.15],
+    buildSlots: [
+      { id: 's01', x: 0.06, y: 0.42 },
+      { id: 's02', x: 0.08, y: 0.67 },
+      { id: 's03', x: 0.11, y: 0.86 },
+      { id: 's04', x: 0.15, y: 0.31 },
+      { id: 's05', x: 0.18, y: 0.6 },
+      { id: 's06', x: 0.21, y: 0.82 },
+      { id: 's07', x: 0.27, y: 0.27 },
+      { id: 's08', x: 0.29, y: 0.58 },
+      { id: 's09', x: 0.33, y: 0.86 },
+      { id: 's10', x: 0.39, y: 0.23 },
+      { id: 's11', x: 0.42, y: 0.55 },
+      { id: 's12', x: 0.46, y: 0.8 },
+      { id: 's13', x: 0.53, y: 0.21 },
+      { id: 's14', x: 0.56, y: 0.48 },
+      { id: 's15', x: 0.6, y: 0.74 },
+      { id: 's16', x: 0.66, y: 0.19 },
+      { id: 's17', x: 0.69, y: 0.43 },
+      { id: 's18', x: 0.73, y: 0.67 },
+      { id: 's19', x: 0.79, y: 0.18 },
+      { id: 's20', x: 0.81, y: 0.39 },
+      { id: 's21', x: 0.85, y: 0.6 },
+      { id: 's22', x: 0.89, y: 0.2 },
+      { id: 's23', x: 0.91, y: 0.34 },
+      { id: 's24', x: 0.93, y: 0.52 },
+    ],
+    waves: map04Waves,
+    fleetTarget: fleetCount(map04Waves),
   },
 };
 
@@ -492,4 +695,12 @@ export const CAMPAIGN_INFO = {
   maxTowerLevel: MAX_TOWER_LEVEL,
   mapCount: Object.keys(MAPS).length,
   minFleetPerMap: 200,
+};
+
+export const CAMPAIGN_PASS_CRITERIA = {
+  failRunPenaltyEquivalent: FAIL_PENALTY_RUN_EQUIVALENT,
+  retentionProbeRuns: RETENTION_PROBE_RUNS,
+  passRateProbeRuns: PASS_RATE_PROBE_RUNS,
+  unlockRunsByMapIndex: PASS_RUN_TARGETS_BY_MAP_INDEX.slice(),
+  mcPassRateByMapIndex: MC_PASS_RATE_TARGETS_BY_MAP_INDEX.slice(),
 };
