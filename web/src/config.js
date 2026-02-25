@@ -450,8 +450,8 @@ export const TOWER_CONFIG = {
     effectType: 'physical',
     levels: createArrowLevels(),
   },
-  bone: {
-    id: 'bone',
+  bomb: {
+    id: 'bomb',
     name: 'Bomb Tower',
     effectType: 'bomb',
     levels: createBombLevels(),

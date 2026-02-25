@@ -2,6 +2,7 @@ import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, ENEMIES, PROGRESSION } from './conf
 
 const WORLD_SCALE = 10;
 const CHAIN_RADIUS = 2.6;
+const LIGHTNING_SHOCK_DURATION = 0.6;
 const MAP_RENDER_WIDTH = 1100;
 const MAP_RENDER_HEIGHT = 680;
 const SLOT_RIVER_CLEARANCE_PX = 16;
@@ -120,6 +121,59 @@ function pickWeightedIndex(weights) {
   return valid.length - 1;
 }
 
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateWaveConfig(wave, waveIndex) {
+  if (!isObject(wave)) {
+    throw new Error(`Wave ${waveIndex + 1} must be an object.`);
+  }
+
+  if (!Number.isFinite(wave.spawnInterval) || wave.spawnInterval <= 0) {
+    throw new Error(`Wave ${waveIndex + 1} has invalid spawnInterval: ${wave.spawnInterval}`);
+  }
+
+  if (!isObject(wave.composition)) {
+    throw new Error(`Wave ${waveIndex + 1} must define a composition object.`);
+  }
+
+  for (const [enemyType, count] of Object.entries(wave.composition)) {
+    if (!ENEMIES[enemyType]) {
+      throw new Error(`Wave ${waveIndex + 1} references unknown enemy type: ${enemyType}`);
+    }
+    if (!Number.isInteger(count) || count < 0) {
+      throw new Error(`Wave ${waveIndex + 1} has invalid count for ${enemyType}: ${count}`);
+    }
+  }
+}
+
+function validateMapConfig(mapConfig) {
+  if (!isObject(mapConfig)) {
+    throw new Error('Map config must be an object.');
+  }
+
+  if (!Array.isArray(mapConfig.routes) || mapConfig.routes.length === 0) {
+    throw new Error(`Map ${mapConfig.mapId || '(unknown)'} must define at least one route.`);
+  }
+
+  for (const route of mapConfig.routes) {
+    if (!Array.isArray(route.waypoints) || route.waypoints.length < 2) {
+      throw new Error(`Map ${mapConfig.mapId || '(unknown)'} has a route with fewer than 2 waypoints.`);
+    }
+  }
+
+  if (!Array.isArray(mapConfig.buildSlots)) {
+    throw new Error(`Map ${mapConfig.mapId || '(unknown)'} must define buildSlots.`);
+  }
+
+  if (!Array.isArray(mapConfig.waves) || mapConfig.waves.length === 0) {
+    throw new Error(`Map ${mapConfig.mapId || '(unknown)'} must define at least one wave.`);
+  }
+
+  mapConfig.waves.forEach((wave, waveIndex) => validateWaveConfig(wave, waveIndex));
+}
+
 export class HomelandGame {
   constructor(options = {}) {
     const mapId = options.mapId || DEFAULT_MAP_ID;
@@ -129,6 +183,7 @@ export class HomelandGame {
 
   loadMap(mapId) {
     const next = MAPS[mapId] || MAPS[DEFAULT_MAP_ID];
+    validateMapConfig(next);
     this.mapId = next.mapId;
     this.mapConfig = next;
     this.waves = next.waves;
@@ -286,16 +341,20 @@ export class HomelandGame {
 
   updateSpawns(dt) {
     const wave = this.waves[this.waveIndex];
+    const spawnInterval = Math.max(0.01, wave.spawnInterval);
     this.spawnCooldown -= dt;
     while (this.spawnQueue.length > 0 && this.spawnCooldown <= 0) {
       const enemyType = this.spawnQueue.shift();
       this.spawnEnemy(enemyType, wave.routeWeights || this.mapConfig.defaultRouteWeights);
-      this.spawnCooldown += wave.spawnInterval;
+      this.spawnCooldown += spawnInterval;
     }
   }
 
   getEnemyTemplate(enemyType) {
     const template = ENEMIES[enemyType];
+    if (!template) {
+      throw new Error(`Unknown enemy type requested: ${enemyType}`);
+    }
     const scale = this.mapConfig.enemyScale || { hp: 1, speed: 1, rewards: 1 };
     return {
       hp: Math.round(template.hp * scale.hp),
@@ -306,6 +365,9 @@ export class HomelandGame {
   }
 
   spawnEnemy(enemyType, routeWeights) {
+    if (!this.routeInfos.length) {
+      throw new Error(`Map ${this.mapConfig.mapId} has no route infos available for spawn.`);
+    }
     const template = this.getEnemyTemplate(enemyType);
     const chosenRoute = pickWeightedIndex(routeWeights);
     const routeIndex = Math.min(chosenRoute, this.routeInfos.length - 1);
@@ -326,6 +388,7 @@ export class HomelandGame {
       burnDurationLeft: 0,
       slowPercent: 0,
       slowDurationLeft: 0,
+      shockDurationLeft: 0,
     });
     this.nextEnemyId += 1;
     this.stats.spawned += 1;
@@ -366,6 +429,9 @@ export class HomelandGame {
         if (enemy.slowDurationLeft === 0) {
           enemy.slowPercent = 0;
         }
+      }
+      if (enemy.shockDurationLeft > 0) {
+        enemy.shockDurationLeft = Math.max(0, enemy.shockDurationLeft - dt);
       }
     }
 
@@ -419,7 +485,9 @@ export class HomelandGame {
       });
 
       if (cfg.effectType === 'lightning') {
+        target.shockDurationLeft = Math.max(target.shockDurationLeft, LIGHTNING_SHOCK_DURATION);
         this.applyLightningChain(
+          tower,
           target,
           levelCfg.damage,
           levelCfg.chainFalloff || 0,
@@ -431,6 +499,8 @@ export class HomelandGame {
 
   applyFireball(tower, target, levelCfg) {
     target.hp -= levelCfg.damage;
+    target.burnDps = Math.max(target.burnDps, levelCfg.fireballDps || 0);
+    target.burnDurationLeft = Math.max(target.burnDurationLeft, levelCfg.fireballDuration || 3.0);
     const targetPos = this.getEnemyWorldPosition(target);
     this.lastAttacks.push({
       from: { x: tower.x, y: tower.y },
@@ -510,7 +580,7 @@ export class HomelandGame {
     return inRange.slice(0, Math.max(1, maxTargets));
   }
 
-  applyLightningChain(sourceEnemy, baseDamage, falloffPercent, chainCount) {
+  applyLightningChain(tower, sourceEnemy, baseDamage, falloffPercent, chainCount) {
     if (chainCount <= 0) {
       return;
     }
@@ -534,6 +604,15 @@ export class HomelandGame {
       }
       const chainDamage = baseDamage * (1 - falloffPercent / 100);
       candidate.enemy.hp -= chainDamage;
+      candidate.enemy.shockDurationLeft = Math.max(
+        candidate.enemy.shockDurationLeft,
+        LIGHTNING_SHOCK_DURATION
+      );
+      this.lastAttacks.push({
+        from: { x: tower.x, y: tower.y },
+        to: this.getEnemyWorldPosition(candidate.enemy),
+        effectType: 'lightning_chain',
+      });
       hits += 1;
     }
   }

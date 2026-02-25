@@ -181,7 +181,7 @@ test('bomb tower applies splash damage to nearby fleets', () => {
   addEnemy(game, 'b_target', 5.1, 1200);
   addEnemy(game, 'b_near', 5.02, 1200);
   addEnemy(game, 'b_far', 0.5, 1200);
-  addTower(game, 'bone', 1, 5.0);
+  addTower(game, 'bomb', 1, 5.0);
 
   game.updateTowerAttacks(0.1);
 

@@ -1,38 +1,56 @@
 import { HomelandGame, getEnemyPosition } from './game-core.js';
 import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG, CAMPAIGN_INFO } from './config.js';
 
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+function requireElement(id) {
+  const el = document.getElementById(id);
+  if (!el) {
+    throw new Error(`Required element is missing: #${id}`);
+  }
+  return el;
+}
 
-const elResult = document.getElementById('result');
-const elMapSelect = document.getElementById('map-select');
-const elMapMeta = document.getElementById('map-meta');
-const elCoinsOverlay = document.getElementById('coins-overlay');
-const elXpOverlay = document.getElementById('xp-overlay');
-const elMapOverlay = document.getElementById('map-overlay');
-const elWaveOverlay = document.getElementById('wave-overlay');
-const elBoatsOverlay = document.getElementById('boats-overlay');
-const elStateOverlay = document.getElementById('state-overlay');
-const elCurveTower = document.getElementById('curve-tower');
-const curveCanvas = document.getElementById('curve-chart');
-const curveCtx = curveCanvas.getContext('2d');
-const elCurveSummary = document.getElementById('curve-summary');
-const elSlotPopout = document.getElementById('slot-popout');
-const elResultWindow = document.getElementById('result-window');
-const elCurveWindow = document.getElementById('curve-window');
-const elResultHandle = document.getElementById('result-handle');
-const elCurveHandle = document.getElementById('curve-handle');
+function requireCanvasContext2D(id) {
+  const canvasEl = requireElement(id);
+  if (!(canvasEl instanceof HTMLCanvasElement)) {
+    throw new Error(`Expected canvas element for #${id}`);
+  }
+  const context = canvasEl.getContext('2d');
+  if (!context) {
+    throw new Error(`2D context unavailable for #${id}`);
+  }
+  return { canvasEl, context };
+}
 
-const btnStartWave = document.getElementById('start-wave');
-const btnToggleSpeed = document.getElementById('toggle-speed');
-const btnFastForwardWave = document.getElementById('fast-forward-wave');
-const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
-const btnToggleReportPanel = document.getElementById('toggle-report-panel');
-const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
-const btnHideReportPanel = document.getElementById('hide-report-panel');
-const btnHideCurvePanel = document.getElementById('hide-curve-panel');
-const btnReset = document.getElementById('reset');
-const btnLoadMap = document.getElementById('load-map');
+const { canvas, context: ctx } = requireCanvasContext2D('game');
+const { canvasEl: curveCanvas, context: curveCtx } = requireCanvasContext2D('curve-chart');
+
+const elResult = requireElement('result');
+const elMapSelect = requireElement('map-select');
+const elMapMeta = requireElement('map-meta');
+const elCoinsOverlay = requireElement('coins-overlay');
+const elXpOverlay = requireElement('xp-overlay');
+const elMapOverlay = requireElement('map-overlay');
+const elWaveOverlay = requireElement('wave-overlay');
+const elBoatsOverlay = requireElement('boats-overlay');
+const elStateOverlay = requireElement('state-overlay');
+const elCurveTower = requireElement('curve-tower');
+const elCurveSummary = requireElement('curve-summary');
+const elSlotPopout = requireElement('slot-popout');
+const elResultWindow = requireElement('result-window');
+const elCurveWindow = requireElement('curve-window');
+const elResultHandle = requireElement('result-handle');
+const elCurveHandle = requireElement('curve-handle');
+
+const btnStartWave = requireElement('start-wave');
+const btnToggleSpeed = requireElement('toggle-speed');
+const btnFastForwardWave = requireElement('fast-forward-wave');
+const btnToggleAutoContinue = requireElement('toggle-auto-continue');
+const btnToggleReportPanel = requireElement('toggle-report-panel');
+const btnToggleCurvePanel = requireElement('toggle-curve-panel');
+const btnHideReportPanel = requireElement('hide-report-panel');
+const btnHideCurvePanel = requireElement('hide-curve-panel');
+const btnReset = requireElement('reset');
+const btnLoadMap = requireElement('load-map');
 
 const game = new HomelandGame({ mapId: DEFAULT_MAP_ID });
 let selectedTowerId = 'arrow';
@@ -875,7 +893,7 @@ function drawBuildSlot(slot, isSelected) {
 
 function towerRoofColor(towerId) {
   if (towerId === 'arrow') return '#a33d31';
-  if (towerId === 'bone') return '#b37031';
+  if (towerId === 'bomb') return '#b37031';
   if (towerId === 'magic_fire') return '#d64c2d';
   if (towerId === 'magic_wind') return '#2587b4';
   if (towerId === 'magic_lightning') return '#b18329';
@@ -884,7 +902,7 @@ function towerRoofColor(towerId) {
 
 function towerBodyColor(towerId) {
   if (towerId === 'arrow') return '#d0c8ad';
-  if (towerId === 'bone') return '#cac4be';
+  if (towerId === 'bomb') return '#cac4be';
   if (towerId === 'magic_fire') return '#bbb5d2';
   if (towerId === 'magic_wind') return '#afcbd1';
   if (towerId === 'magic_lightning') return '#c9c1a0';

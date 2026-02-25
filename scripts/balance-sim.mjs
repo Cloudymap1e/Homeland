@@ -8,7 +8,7 @@ const DEFAULT_RUNS = 1000;
 const DEFAULT_WORKERS = Math.max(1, Math.min(8, (os.cpus()?.length || 4) - 1));
 const SEARCH_FRACTION = 0.2;
 
-const TOWER_IDS = ['arrow', 'bone', 'magic_fire', 'magic_wind', 'magic_lightning'];
+const TOWER_IDS = ['arrow', 'bomb', 'magic_fire', 'magic_wind', 'magic_lightning'];
 const MONO_POLICIES = ['mono_arrow', 'mono_bomb', 'mono_fire', 'mono_wind', 'mono_lightning'];
 
 const TARGETS = {
@@ -69,28 +69,28 @@ const POLICIES = {
     allowed: TOWER_IDS,
     minimums: [
       { towerId: 'arrow', min: 1, wave: 1 },
-      { towerId: 'bone', min: 1, wave: 1 },
+      { towerId: 'bomb', min: 1, wave: 1 },
       { towerId: 'magic_fire', min: 1, wave: 2 },
       { towerId: 'magic_wind', min: 1, wave: 2 },
       { towerId: 'magic_lightning', min: 1, wave: 4 },
     ],
     weightMult: {
       arrow: 0.86,
-      bone: 1.14,
+      bomb: 1.14,
       magic_fire: 1.18,
       magic_wind: 1.04,
       magic_lightning: 1.12,
     },
     spreadTargets: {
       arrow: 0.18,
-      bone: 0.26,
+      bomb: 0.26,
       magic_fire: 0.24,
       magic_wind: 0.18,
       magic_lightning: 0.14,
     },
     upgradeBias: {
       arrow: 0.95,
-      bone: 1.2,
+      bomb: 1.2,
       magic_fire: 1.2,
       magic_wind: 1.08,
       magic_lightning: 1.18,
@@ -118,11 +118,11 @@ const POLICIES = {
   mono_bomb: {
     id: 'mono_bomb',
     label: 'Mono Bomb',
-    allowed: ['bone'],
-    minimums: [{ towerId: 'bone', min: 2, wave: 1 }],
-    weightMult: { bone: 1.2 },
+    allowed: ['bomb'],
+    minimums: [{ towerId: 'bomb', min: 2, wave: 1 }],
+    weightMult: { bomb: 1.2 },
     spreadTargets: null,
-    upgradeBias: { bone: 1.2 },
+    upgradeBias: { bomb: 1.2 },
   },
   mono_fire: {
     id: 'mono_fire',
@@ -154,14 +154,14 @@ const POLICIES = {
   duo_bomb_fire: {
     id: 'duo_bomb_fire',
     label: 'Duo Bomb + Fire',
-    allowed: ['bone', 'magic_fire'],
+    allowed: ['bomb', 'magic_fire'],
     minimums: [
-      { towerId: 'bone', min: 2, wave: 1 },
+      { towerId: 'bomb', min: 2, wave: 1 },
       { towerId: 'magic_fire', min: 2, wave: 2 },
     ],
-    weightMult: { bone: 1.15, magic_fire: 1.15 },
-    spreadTargets: { bone: 0.5, magic_fire: 0.5 },
-    upgradeBias: { bone: 1.1, magic_fire: 1.1 },
+    weightMult: { bomb: 1.15, magic_fire: 1.15 },
+    spreadTargets: { bomb: 0.5, magic_fire: 0.5 },
+    upgradeBias: { bomb: 1.1, magic_fire: 1.1 },
   },
   duo_arrow_wind: {
     id: 'duo_arrow_wind',
@@ -340,13 +340,13 @@ function desiredUpgradeLevel(game, waveIndex) {
 function baseWeightsForMap(mapId) {
   const base = {
     arrow: 0.28,
-    bone: 0.25,
+    bomb: 0.25,
     magic_fire: 0.2,
     magic_wind: 0.19,
     magic_lightning: 0.08,
   };
   if (mapId !== 'map_01_river_bend') {
-    base.bone += 0.04;
+    base.bomb += 0.04;
     base.magic_lightning += 0.05;
   }
   return base;
@@ -363,8 +363,8 @@ function buildWeights(waveIndex, counts, mapId, policy) {
   if (waveIndex >= 4 && counts.magic_fire === 0 && allowedSet.has('magic_fire')) {
     weights.magic_fire += 0.7;
   }
-  if (counts.bone === 0 && allowedSet.has('bone')) {
-    weights.bone += 0.6;
+  if (counts.bomb === 0 && allowedSet.has('bomb')) {
+    weights.bomb += 0.6;
   }
   if (counts.arrow < 2 && allowedSet.has('arrow')) {
     weights.arrow += 0.4;
@@ -706,7 +706,7 @@ function finalizeAggregate(agg) {
 function snapshotTunables() {
   return {
     wind: TOWER_CONFIG.magic_wind.levels.map((lvl) => ({ slowPercent: lvl.slowPercent })),
-    bomb: TOWER_CONFIG.bone.levels.map((lvl) => ({ splashRadius: lvl.splashRadius })),
+    bomb: TOWER_CONFIG.bomb.levels.map((lvl) => ({ splashRadius: lvl.splashRadius })),
     fire: TOWER_CONFIG.magic_fire.levels.map((lvl) => ({ fireballDps: lvl.fireballDps })),
   };
 }
@@ -715,7 +715,7 @@ function restoreTunables(snapshot) {
   TOWER_CONFIG.magic_wind.levels.forEach((lvl, idx) => {
     lvl.slowPercent = snapshot.wind[idx].slowPercent;
   });
-  TOWER_CONFIG.bone.levels.forEach((lvl, idx) => {
+  TOWER_CONFIG.bomb.levels.forEach((lvl, idx) => {
     lvl.splashRadius = snapshot.bomb[idx].splashRadius;
   });
   TOWER_CONFIG.magic_fire.levels.forEach((lvl, idx) => {
@@ -727,7 +727,7 @@ function applyMultipliers(multipliers) {
   TOWER_CONFIG.magic_wind.levels.forEach((lvl) => {
     lvl.slowPercent = Math.round(lvl.slowPercent * multipliers.windSlowMult);
   });
-  TOWER_CONFIG.bone.levels.forEach((lvl) => {
+  TOWER_CONFIG.bomb.levels.forEach((lvl) => {
     lvl.splashRadius = Number((lvl.splashRadius * multipliers.bombSplashMult).toFixed(2));
   });
   TOWER_CONFIG.magic_fire.levels.forEach((lvl) => {
@@ -1214,9 +1214,9 @@ async function main() {
           level50: TOWER_CONFIG.magic_wind.levels[49].slowPercent,
         },
         bombSplashRadius: {
-          level1: TOWER_CONFIG.bone.levels[0].splashRadius,
-          level25: TOWER_CONFIG.bone.levels[24].splashRadius,
-          level50: TOWER_CONFIG.bone.levels[49].splashRadius,
+          level1: TOWER_CONFIG.bomb.levels[0].splashRadius,
+          level25: TOWER_CONFIG.bomb.levels[24].splashRadius,
+          level50: TOWER_CONFIG.bomb.levels[49].splashRadius,
         },
         fireballDps: {
           level1: TOWER_CONFIG.magic_fire.levels[0].fireballDps,
