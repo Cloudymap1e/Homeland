@@ -16,7 +16,7 @@ const MAP_ORDER = Object.keys(MAPS);
 const MAP_INDEX = new Map(MAP_ORDER.map((mapId, index) => [mapId, index]));
 const FAIL_RUN_PENALTY_EQUIVALENT = 2;
 const RUN_TARGETS_BY_MAP_INDEX = [30, 50, 60, 90, 100, 120];
-const PASS_RATE_TARGETS_BY_MAP_INDEX = [0.9, 0.85, 0.8, 0.77, 0.75, 0.7];
+const PASS_RATE_TARGETS_BY_MAP_INDEX = [0.9, 0.85, 0.8, 0.77, 0.58, 0.5];
 
 const BASE_TARGETS = {
   map_01_river_bend: {
@@ -772,6 +772,7 @@ function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all'
 
   const rand = createRng(seed);
   const game = new HomelandGame();
+  let lastOutcome = null;
   for (let mapIndex = 0; mapIndex < targetIndex; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
     const switched = game.setMap(mapId, { ignoreUnlock: true, carryResources: mapIndex > 0 });
@@ -784,7 +785,12 @@ function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all'
       };
     }
 
+    if (mapIndex > 0) {
+      game.coins += getMapById(mapId).startingCoins;
+    }
+
     const outcome = runCurrentMap(game, rand, mapId, policyId);
+    lastOutcome = outcome;
     if (!outcome.victory) {
       return {
         reachedTarget: false,
@@ -795,23 +801,20 @@ function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all'
     }
   }
 
-  const switchedToTarget = game.setMap(targetMapId, {
-    ignoreUnlock: true,
-    carryResources: targetIndex > 0,
-  });
-  if (!switchedToTarget.ok) {
+  if (targetIndex === 0) {
     return {
-      reachedTarget: false,
-      failedMapId: targetMapId,
-      retainedCoins: game.coins,
-      retainedXp: game.xp,
+      reachedTarget: true,
+      failedMapId: null,
+      retainedCoins: 0,
+      retainedXp: 0,
     };
   }
+
   return {
     reachedTarget: true,
     failedMapId: null,
-    retainedCoins: game.coins,
-    retainedXp: game.xp,
+    retainedCoins: lastOutcome ? lastOutcome.coins : game.coins,
+    retainedXp: lastOutcome ? lastOutcome.xp : game.xp,
   };
 }
 
@@ -847,6 +850,7 @@ function emptyRetentionAggregate() {
     reachedTarget: 0,
     retainedCoinsSum: 0,
     retainedXpSum: 0,
+    minRetainedCoins: Number.POSITIVE_INFINITY,
     blockedByMap: {},
   };
 }
@@ -891,6 +895,7 @@ function mergeRetentionAggregate(a, b) {
     reachedTarget: a.reachedTarget + b.reachedTarget,
     retainedCoinsSum: a.retainedCoinsSum + b.retainedCoinsSum,
     retainedXpSum: a.retainedXpSum + b.retainedXpSum,
+    minRetainedCoins: Math.min(a.minRetainedCoins, b.minRetainedCoins),
     blockedByMap: mergeBlockedByMap(a.blockedByMap, b.blockedByMap),
   };
 }
@@ -956,6 +961,7 @@ function finalizeRetentionAggregate(agg) {
     reachRate: agg.attempts ? reached / agg.attempts : 0,
     avgRetainedCoins: reached ? agg.retainedCoinsSum / reached : 0,
     avgRetainedXp: reached ? agg.retainedXpSum / reached : 0,
+    minRetainedCoins: reached ? agg.minRetainedCoins : 0,
     blockedByMap: agg.blockedByMap,
   };
 }
@@ -1386,9 +1392,12 @@ async function runPassCriteriaStandard({
       policyId: retentionPolicyId,
     });
 
-    const baseCoins = retention.reachedTarget
-      ? Math.round(retention.avgRetainedCoins)
-      : getMapById(mapId).startingCoins;
+    const mapCfg = getMapById(mapId);
+    const mapIndex = MAP_INDEX.get(mapId) || 0;
+    const retainedCoinsFloor = mapIndex === 0
+      ? 0
+      : (retention.reachedTarget ? Math.max(0, Math.round(retention.minRetainedCoins)) : 0);
+    const baseCoins = mapCfg.startingCoins + retainedCoinsFloor;
 
     const summary = await runManyParallel({
       mapId,
@@ -1415,6 +1424,7 @@ async function runPassCriteriaStandard({
       retentionRuns,
       retentionReachRate: retention.reachRate,
       retentionReached: retention.reachedTarget,
+      retentionMinCoins: retainedCoinsFloor,
       retentionAvgCoins: baseCoins,
       retentionAvgXp: Math.round(retention.avgRetainedXp),
       topRetentionBlocker: topBlocker ? { mapId: topBlocker[0], count: topBlocker[1] } : null,
@@ -1444,6 +1454,7 @@ function printPassCriteriaStandard(rows) {
       retentionProbeRuns: row.retentionRuns,
       retentionReachRate: Number((row.retentionReachRate * 100).toFixed(2)),
       retentionReached: row.retentionReached,
+      retainedCoinsFloor: row.retentionMinCoins,
       retainedCoinsBase: row.retentionAvgCoins,
       retainedXpBase: row.retentionAvgXp,
       topRetentionBlocker: row.topRetentionBlocker,
@@ -1744,6 +1755,7 @@ function runRetentionWorkerBatch() {
       agg.reachedTarget += 1;
       agg.retainedCoinsSum += result.retainedCoins;
       agg.retainedXpSum += result.retainedXp;
+      agg.minRetainedCoins = Math.min(agg.minRetainedCoins, result.retainedCoins);
     } else if (result.failedMapId) {
       agg.blockedByMap[result.failedMapId] = (agg.blockedByMap[result.failedMapId] || 0) + 1;
     }
