@@ -22,6 +22,14 @@ test('slot popout tower button responds to real click', async ({ page }) => {
 
   await expect(page.locator('#slot-popout')).toBeVisible();
 
+  const activateButton = page.locator('#slot-popout .slot-option').first();
+  await expect(activateButton).toContainText('Activate Slot');
+  await activateButton.click();
+
+  const coinTextAfterActivate = await page.locator('#coins-overlay').innerText();
+  const coinsAfterActivate = Number(coinTextAfterActivate.replaceAll(',', ''));
+  expect(coinsBefore - coinsAfterActivate).toBe(45);
+
   const firstTowerButton = page.locator('#slot-popout .slot-option').first();
   await expect(firstTowerButton).toBeVisible();
   await firstTowerButton.click();
@@ -32,7 +40,8 @@ test('slot popout tower button responds to real click', async ({ page }) => {
   const coinsAfter = Number(coinTextAfter.replaceAll(',', ''));
 
   expect(coinsAfter).toBeLessThan(coinsBefore);
-  expect(coinsBefore - coinsAfter).toBe(460);
+  expect(coinsAfterActivate - coinsAfter).toBe(460);
+  expect(coinsBefore - coinsAfter).toBe(505);
 });
 
 test('can build and upgrade from slot popout during active wave', async ({ page }) => {
@@ -54,6 +63,14 @@ test('can build and upgrade from slot popout during active wave', async ({ page 
 
   const coinTextBefore = await page.locator('#coins-overlay').innerText();
   const coinsBefore = Number(coinTextBefore.replaceAll(',', ''));
+
+  const activateButton = page.locator('#slot-popout .slot-option').first();
+  await expect(activateButton).toContainText('Activate Slot');
+  await activateButton.click();
+
+  const coinTextAfterActivate = await page.locator('#coins-overlay').innerText();
+  const coinsAfterActivate = Number(coinTextAfterActivate.replaceAll(',', ''));
+  expect(coinsAfterActivate).toBeLessThan(coinsBefore);
 
   const buildButton = page.locator('#slot-popout .slot-option').first();
   await expect(buildButton).toBeEnabled();
