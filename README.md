@@ -73,6 +73,10 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 
 - XP gained by successful defense and completions.
 - XP deducted on leak/failure conditions.
+- Campaign pass criteria standard:
+  - one failed run deducts about `2` run-equivalents of progression XP,
+  - expected unlock run targets scale by map index: `30`, `50`, `60`, `90`, `100`, `120`...
+  - Monte Carlo pass-rate targets decline with map difficulty (`Map 5: 75%`, `Map 6: 70%`).
 - Map unlocks require both:
   - previous map(s) cleared in sequence,
   - required XP milestone.
@@ -254,6 +258,9 @@ npm run balance:sim
 This command runs:
 - multipliers search,
 - full 1,000-run verification,
+- campaign pass-standard framework:
+  - retention baseline: `100` random-policy campaign probes per map,
+  - fixed-budget pass-rate check: `1000` runs using retained-coins baseline,
 - diversity scenario matrix (mono/duo/mixed),
 - controlled OAT sensitivity checks (one factor at a time),
 - random policy baseline (`random_all`) with initial map coins.
@@ -262,7 +269,9 @@ Current random-policy balance intent (not strict hard limits):
 - Map 1 clear rate near 90%,
 - Map 2 clear rate near 85%,
 - Map 3 clear rate near 80%,
-- Map 4 clear rate near 77%.
+- Map 4 clear rate near 77%,
+- Map 5 clear rate near 75%,
+- Map 6 clear rate near 70%.
 
 Scaling policy for future iterations:
 - Keep tower level curves mostly stable for consistency.
@@ -280,6 +289,13 @@ Diversity + controlled-variable suite without search (faster):
 ```bash
 cd /Users/rc/Project/Homeland
 npm run balance:diversity
+```
+
+Pass-standard framework only (retention baseline + fixed-budget pass-rate checks):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run balance:standard
 ```
 
 GS75 CUDA-first balance run:

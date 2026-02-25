@@ -1075,7 +1075,16 @@ function isCudaAvailable() {
   }
 }
 
-async function runManyParallel({ mapId, runs, seedStart, workers, multipliers, policyId }) {
+async function runManyParallel({
+  mapId,
+  runs,
+  seedStart,
+  workers,
+  multipliers,
+  policyId,
+  startingCoinsOverride = null,
+  startingXpOverride = null,
+}) {
   if (runs <= 0) {
     return finalizeAggregate(emptyAggregate());
   }
@@ -1098,6 +1107,8 @@ async function runManyParallel({ mapId, runs, seedStart, workers, multipliers, p
             seedStart: cursor,
             multipliers,
             policyId,
+            startingCoinsOverride,
+            startingXpOverride,
           },
         });
         cursor += count;
@@ -1119,6 +1130,59 @@ async function runManyParallel({ mapId, runs, seedStart, workers, multipliers, p
     merged = mergeAggregate(merged, part);
   }
   return finalizeAggregate(merged);
+}
+
+async function runRetentionParallel({
+  targetMapId,
+  runs,
+  seedStart,
+  workers,
+  multipliers,
+  policyId,
+}) {
+  if (runs <= 0) {
+    return finalizeRetentionAggregate(emptyRetentionAggregate());
+  }
+
+  const workerCount = Math.min(workers, runs);
+  const base = Math.floor(runs / workerCount);
+  const remainder = runs % workerCount;
+  let cursor = seedStart;
+
+  const jobs = [];
+  for (let i = 0; i < workerCount; i += 1) {
+    const count = base + (i < remainder ? 1 : 0);
+    jobs.push(
+      new Promise((resolve, reject) => {
+        const worker = new Worker(new URL(import.meta.url), {
+          workerData: {
+            mode: 'retention_batch',
+            targetMapId,
+            runs: count,
+            seedStart: cursor,
+            multipliers,
+            policyId,
+          },
+        });
+        cursor += count;
+
+        worker.on('message', (result) => resolve(result));
+        worker.on('error', reject);
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            reject(new Error(`Worker exited with code ${code}`));
+          }
+        });
+      })
+    );
+  }
+
+  const parts = await Promise.all(jobs);
+  let merged = emptyRetentionAggregate();
+  for (const part of parts) {
+    merged = mergeRetentionAggregate(merged, part);
+  }
+  return finalizeRetentionAggregate(merged);
 }
 
 function compactTowerSummary(summary) {
@@ -1290,6 +1354,112 @@ async function runOatSensitivity({ mapIds, runs, workers, baseMultipliers, polic
   return results;
 }
 
+function estimateAttemptsForRunTarget(runTarget, clearRate, failRunPenaltyEquivalent) {
+  const netRunsPerAttempt = clearRate - (1 - clearRate) * failRunPenaltyEquivalent;
+  if (netRunsPerAttempt <= 0) {
+    return { netRunsPerAttempt, expectedAttempts: null };
+  }
+  return {
+    netRunsPerAttempt,
+    expectedAttempts: Math.ceil(runTarget / netRunsPerAttempt),
+  };
+}
+
+async function runPassCriteriaStandard({
+  mapIds,
+  workers,
+  multipliers,
+  retentionRuns,
+  standardRuns,
+  retentionPolicyId,
+  evaluationPolicyId,
+}) {
+  const rows = [];
+  const orderedMaps = MAP_ORDER.filter((mapId) => mapIds.includes(mapId));
+  for (const mapId of orderedMaps) {
+    const retention = await runRetentionParallel({
+      targetMapId: mapId,
+      runs: retentionRuns,
+      seedStart: 6001 + (MAP_INDEX.get(mapId) || 0) * 10000,
+      workers,
+      multipliers,
+      policyId: retentionPolicyId,
+    });
+
+    const baseCoins = retention.reachedTarget
+      ? Math.round(retention.avgRetainedCoins)
+      : getMapById(mapId).startingCoins;
+
+    const summary = await runManyParallel({
+      mapId,
+      runs: standardRuns,
+      seedStart: 9001 + (MAP_INDEX.get(mapId) || 0) * 10000,
+      workers,
+      multipliers,
+      policyId: evaluationPolicyId,
+      startingCoinsOverride: baseCoins,
+    });
+
+    const passRateTarget = passRateTargetForMap(mapId);
+    const runTarget = runTargetForMap(mapId);
+    const attemptsEstimate = estimateAttemptsForRunTarget(
+      runTarget,
+      summary.clearRate,
+      FAIL_RUN_PENALTY_EQUIVALENT
+    );
+    const topBlocker = Object.entries(retention.blockedByMap).sort((a, b) => b[1] - a[1])[0] || null;
+
+    rows.push({
+      mapId,
+      mapName: getMapById(mapId).name,
+      retentionRuns,
+      retentionReachRate: retention.reachRate,
+      retentionReached: retention.reachedTarget,
+      retentionAvgCoins: baseCoins,
+      retentionAvgXp: Math.round(retention.avgRetainedXp),
+      topRetentionBlocker: topBlocker ? { mapId: topBlocker[0], count: topBlocker[1] } : null,
+      standardRuns,
+      clearRate: summary.clearRate,
+      qualityRate: summary.qualityRate,
+      avgLeaks: summary.avgLeaks,
+      passRateTarget,
+      runTarget,
+      failRunPenaltyEquivalent: FAIL_RUN_PENALTY_EQUIVALENT,
+      netRunsPerAttempt: attemptsEstimate.netRunsPerAttempt,
+      expectedAttemptsToPass: attemptsEstimate.expectedAttempts,
+      meetsPassRateTarget: summary.clearRate >= passRateTarget,
+    });
+  }
+  return rows;
+}
+
+function printPassCriteriaStandard(rows) {
+  console.log('\nCampaign pass criteria standard (retention baseline -> fixed-budget MC pass rate)');
+  for (const row of rows) {
+    const payload = {
+      mapId: row.mapId,
+      mapName: row.mapName,
+      unlockRunsTarget: row.runTarget,
+      failPenaltyRuns: row.failRunPenaltyEquivalent,
+      retentionProbeRuns: row.retentionRuns,
+      retentionReachRate: Number((row.retentionReachRate * 100).toFixed(2)),
+      retentionReached: row.retentionReached,
+      retainedCoinsBase: row.retentionAvgCoins,
+      retainedXpBase: row.retentionAvgXp,
+      topRetentionBlocker: row.topRetentionBlocker,
+      standardRuns: row.standardRuns,
+      mcPassRate: Number((row.clearRate * 100).toFixed(2)),
+      mcPassRateTarget: Number((row.passRateTarget * 100).toFixed(2)),
+      qualityRate: Number((row.qualityRate * 100).toFixed(2)),
+      avgLeaks: Number(row.avgLeaks.toFixed(2)),
+      netRunsPerAttempt: Number(row.netRunsPerAttempt.toFixed(3)),
+      expectedAttemptsToPass: row.expectedAttemptsToPass,
+      meetsPassRateTarget: row.meetsPassRateTarget,
+    };
+    console.log(JSON.stringify(payload, null, 2));
+  }
+}
+
 function printMapSet(label, byMap, mapIds) {
   console.log(`\n${label}`);
   for (const mapId of mapIds) {
@@ -1310,6 +1480,8 @@ async function main() {
   const mapIds = parseMapIds(args.maps);
   const primaryPolicyIds = parsePolicyIds(args.policies);
   const policyId = primaryPolicyIds[0] || 'random_all';
+  const retentionPolicyIds = parsePolicyIds(args.retentionPolicy);
+  const retentionPolicyId = retentionPolicyIds[0] || 'random_all';
   const baselineMultipliers = { windSlowMult: 1, bombSplashMult: 1, fireDpsMult: 1 };
   const searchRuns = args.searchRuns || Math.max(80, Math.round(args.runs * SEARCH_FRACTION));
 
@@ -1326,6 +1498,7 @@ async function main() {
   console.log(`runs=${args.runs} searchRuns=${searchRuns} workers=${workers}`);
   console.log(`maps=${mapIds.join(', ')}`);
   console.log(`policy=${policyId}`);
+  console.log(`suite=${args.suite}`);
   if (args.cuda) {
     if (cudaDetected) {
       console.log('CUDA detected: using high-throughput mode with expanded worker parallelism.');
@@ -1393,6 +1566,28 @@ async function main() {
     policyId,
   });
   printMapSet('Full verification (selected multipliers)', verified, mapIds);
+
+  const shouldRunPassStandard = args.suite !== 'quick' && !args.skipStandard;
+  if (shouldRunPassStandard) {
+    console.log(
+      `\nCampaign pass standard (retentionRuns=${args.retentionRuns} standardRuns=${args.standardRuns} ` +
+      `retentionPolicy=${retentionPolicyId} failPenaltyRuns=${FAIL_RUN_PENALTY_EQUIVALENT})...`
+    );
+    const criteriaRows = await runPassCriteriaStandard({
+      mapIds,
+      workers,
+      multipliers: selectedMultipliers,
+      retentionRuns: args.retentionRuns,
+      standardRuns: args.standardRuns,
+      retentionPolicyId,
+      evaluationPolicyId: policyId,
+    });
+    printPassCriteriaStandard(criteriaRows);
+  } else if (args.skipStandard) {
+    console.log('\nCampaign pass standard skipped by --skip-standard.');
+  } else if (args.suite === 'quick') {
+    console.log('\nCampaign pass standard skipped for quick suite.');
+  }
 
   if (args.suite === 'full') {
     const diversityRuns = args.diversityRuns || Math.max(180, Math.round(args.runs * 0.35));
@@ -1536,6 +1731,28 @@ function runWorkerBatch() {
   parentPort.postMessage(agg);
 }
 
+function runRetentionWorkerBatch() {
+  const { targetMapId, runs, seedStart, multipliers, policyId } = workerData;
+  const snapshot = snapshotTunables();
+  applyMultipliers(multipliers);
+
+  let agg = emptyRetentionAggregate();
+  for (let i = 0; i < runs; i += 1) {
+    const result = runCampaignRetentionBaseline(seedStart + i, targetMapId, policyId);
+    agg.attempts += 1;
+    if (result.reachedTarget) {
+      agg.reachedTarget += 1;
+      agg.retainedCoinsSum += result.retainedCoins;
+      agg.retainedXpSum += result.retainedXp;
+    } else if (result.failedMapId) {
+      agg.blockedByMap[result.failedMapId] = (agg.blockedByMap[result.failedMapId] || 0) + 1;
+    }
+  }
+
+  restoreTunables(snapshot);
+  parentPort.postMessage(agg);
+}
+
 if (isMainThread) {
   main().catch((error) => {
     console.error(error);
@@ -1543,4 +1760,6 @@ if (isMainThread) {
   });
 } else if (workerData?.mode === 'batch') {
   runWorkerBatch();
+} else if (workerData?.mode === 'retention_batch') {
+  runRetentionWorkerBatch();
 }

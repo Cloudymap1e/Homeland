@@ -124,19 +124,28 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Balance validation must include diversity and controlled-variable checks, not only a single mixed policy run.
 - Required coverage in a balancing cycle:
   - random baseline (`random_all` policy using initial map coins),
+  - campaign retention baseline (about `100` random-policy runs per map, passing all previous maps first, then averaging retained coins),
+  - fixed-budget pass-rate check (about `1000` runs per map, seeded with retained-coins baseline),
   - mixed baseline (`balanced` policy) for tower composition comparison,
   - mono tower scenarios (arrow, bomb, fire, wind, lightning),
   - duo tower scenarios (at least 3 combinations),
   - OAT sensitivity for `windSlowMult`, `bombSplashMult`, `fireDpsMult`.
+- Progression pass criteria:
+  - one failed run should deduct roughly `2` run-equivalents of XP progress,
+  - expected run targets to pass should scale roughly `30`, `50`, `60`, `90`, `100`... by map difficulty.
 - Campaign random-policy difficulty targets should trend near:
   - Map 1 clear rate: ~90%
   - Map 2 clear rate: ~85%
   - Map 3 clear rate: ~80%
+  - Map 4 clear rate: ~77%
+  - Map 5 clear rate: ~75%
+  - Map 6 clear rate: ~70%
 - Prefer enemy-side scaling for progression updates:
   - adjust enemy HP/speed/rewards, map `enemyScale`, leak penalties, and wave composition first;
   - avoid frequent tower-curve rewrites unless a tower role is fundamentally broken.
 - Use:
-  - `npm run balance:sim` for full search + diversity + OAT,
+  - `npm run balance:sim` for full search + pass-standard + diversity + OAT,
+  - `npm run balance:standard` for pass-standard only (retention + fixed-budget pass-rate),
   - `npm run balance:diversity` for faster no-search diversity/OAT reruns.
 
 ## Cloudflare Tunnel Publish (Required Hostname)
