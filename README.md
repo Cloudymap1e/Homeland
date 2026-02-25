@@ -60,11 +60,12 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 ### Economy
 
 - Coins are used for:
-  - tower placement
+  - slot activation (pay once per slot per map run)
+  - tower placement (after slot activation)
   - tower upgrades
 - Coins are gained from:
   - destroying enemy boats
-  - completing waves/maps (optional bonus)
+  - completing waves/maps (map clear rewards included)
 - Coins are lost from:
   - leak penalties
 
@@ -72,7 +73,9 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 
 - XP gained by successful defense and completions.
 - XP deducted on leak/failure conditions.
-- Map unlocks require XP milestones.
+- Map unlocks require both:
+  - previous map(s) cleared in sequence,
+  - required XP milestone.
 - Difficulty rises with progression:
   - stronger fleets
   - faster boats
@@ -215,6 +218,13 @@ Runtime control additions:
 - `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
 - `Tower Curves` panel: visualizes each tower's capability growth and cost growth across levels 1-50.
 
+Campaign progression additions:
+- Slots now require explicit unlock payment before towers can be placed.
+- Coins and XP carry forward across map transitions.
+- Each cleared map grants a clear reward (coins/XP).
+- Map unlocks are sequential (cannot skip earlier maps).
+- New playable map added: `Map 4 - Tide Lock`.
+
 Progress persistence:
 - Player progress now auto-saves continuously and on tab close.
 - Session identity is indexed by `homeland_sid` cookie, with client IP fallback if cookie is missing.
@@ -251,7 +261,8 @@ This command runs:
 Current random-policy balance intent (not strict hard limits):
 - Map 1 clear rate near 90%,
 - Map 2 clear rate near 85%,
-- Map 3 clear rate near 80%.
+- Map 3 clear rate near 80%,
+- Map 4 clear rate near 77%.
 
 Scaling policy for future iterations:
 - Keep tower level curves mostly stable for consistency.

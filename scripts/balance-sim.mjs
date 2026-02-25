@@ -48,6 +48,18 @@ const TARGETS = {
     leaksCenter: 14,
     qualityLeakCap: 28,
   },
+  map_04_tide_lock: {
+    clearMin: 0.72,
+    clearMax: 0.82,
+    clearCenter: 0.77,
+    qualityMin: 0.37,
+    qualityMax: 0.64,
+    qualityCenter: 0.5,
+    leaksMin: 11,
+    leaksMax: 34,
+    leaksCenter: 21,
+    qualityLeakCap: 36,
+  },
 };
 
 const SEARCH_GRID = {
@@ -292,11 +304,17 @@ function getMapById(mapId) {
 }
 
 function getEmptySlots(game) {
-  return game.mapConfig.buildSlots.filter((slot) => !game.getTower(slot.id));
+  return game.getBuildSlots().filter(
+    (slot) => game.isSlotActivated(slot.id) && !game.getTower(slot.id)
+  );
+}
+
+function getLockedSlots(game) {
+  return game.getBuildSlots().filter((slot) => !game.isSlotActivated(slot.id));
 }
 
 function getBuiltTowers(game) {
-  return game.mapConfig.buildSlots
+  return game.getBuildSlots()
     .map((slot) => game.getTower(slot.id))
     .filter((tower) => tower !== null);
 }
@@ -326,9 +344,10 @@ function towerCounts(game) {
 
 function desiredTowerCount(game, waveIndex) {
   const fraction = Math.min(1, waveIndex / Math.max(1, game.waves.length - 1));
+  const slotCount = game.getBuildSlots().length;
   return Math.min(
-    game.mapConfig.buildSlots.length,
-    5 + Math.floor(fraction * (game.mapConfig.buildSlots.length - 4))
+    slotCount,
+    5 + Math.floor(fraction * Math.max(0, slotCount - 4))
   );
 }
 
@@ -413,6 +432,27 @@ function tryBuildSpecific(game, rand, towerId, policy) {
   return game.buildTower(slot.id, towerId).ok;
 }
 
+function tryActivateAction(game, rand) {
+  const locked = getLockedSlots(game)
+    .map((slot) => ({ slot, cost: game.getSlotActivationCost(slot.id) }))
+    .filter((entry) => entry.cost <= game.coins);
+  if (!locked.length) {
+    return null;
+  }
+  const pick = pickRandom(rand, locked);
+  return game.activateSlot(pick.slot.id).ok ? pick.slot.id : null;
+}
+
+function tryBuildOnSpecificSlot(game, rand, slotId, policy) {
+  const affordable = Object.values(TOWER_CONFIG)
+    .filter((cfg) => policy.allowed.includes(cfg.id) && cfg.levels[0].cost <= game.coins);
+  if (!affordable.length) {
+    return false;
+  }
+  const cfg = pickRandom(rand, affordable);
+  return game.buildTower(slotId, cfg.id).ok;
+}
+
 function enforceMinimumComposition(game, rand, policy, waveIndex, counts) {
   for (const rule of policy.minimums || []) {
     if (waveIndex < rule.wave) {
@@ -484,20 +524,37 @@ function affordableUpgrades(game, policy) {
     .filter((tower) => upgradeCost(tower) <= game.coins);
 }
 
+function affordableActivations(game) {
+  return getLockedSlots(game).filter((slot) => game.getSlotActivationCost(slot.id) <= game.coins);
+}
+
 function runRandomBuildPhase(game, rand, policy) {
-  const actions = 2 + Math.floor(rand() * 7);
+  const actions = 3 + Math.floor(rand() * 8);
   for (let i = 0; i < actions; i += 1) {
     const hasEmptySlot = getEmptySlots(game).length > 0;
     const buildChoices = hasEmptySlot ? affordableBuilds(game, policy) : [];
     const upgradeChoices = affordableUpgrades(game, policy);
+    const activationChoices = affordableActivations(game);
+    const canActivate = activationChoices.length > 0;
     const canBuild = buildChoices.length > 0;
     const canUpgrade = upgradeChoices.length > 0;
 
-    if (!canBuild && !canUpgrade) {
+    if (!canBuild && !canUpgrade && !canActivate) {
       break;
     }
 
-    const buildBias = getBuiltTowers(game).length < 8 ? 0.62 : 0.42;
+    const activateBias = getBuiltTowers(game).length < 6 ? 0.45 : 0.16;
+    if (canActivate && (!canBuild || rand() < activateBias)) {
+      const activatedSlotId = tryActivateAction(game, rand);
+      if (activatedSlotId) {
+        if (rand() < 0.38) {
+          tryBuildOnSpecificSlot(game, rand, activatedSlotId, policy);
+        }
+        continue;
+      }
+    }
+
+    const buildBias = getBuiltTowers(game).length < 9 ? 0.62 : 0.45;
     const wantBuild = canBuild && (!canUpgrade || rand() < buildBias);
 
     if (wantBuild) {
@@ -517,6 +574,16 @@ function runRandomBuildPhase(game, rand, policy) {
     if (canBuild) {
       const towerId = pickRandom(rand, buildChoices);
       if (tryBuildSpecific(game, rand, towerId, policy)) {
+        continue;
+      }
+    }
+
+    if (canActivate) {
+      const activatedSlotId = tryActivateAction(game, rand);
+      if (activatedSlotId) {
+        if (rand() < 0.3) {
+          tryBuildOnSpecificSlot(game, rand, activatedSlotId, policy);
+        }
         continue;
       }
     }
@@ -542,10 +609,16 @@ function runBuildPhase(game, rand, mapId, policy) {
     }
 
     const shouldBuild = built.length < wantedTowers && getEmptySlots(game).length > 0;
+    if (!shouldBuild && tryActivateAction(game, rand)) {
+      continue;
+    }
     if (shouldBuild && tryBuildAction(game, rand, waveIndex, counts, mapId, policy)) {
       continue;
     }
     if (tryUpgradeAction(game, rand, waveIndex, policy)) {
+      continue;
+    }
+    if (tryActivateAction(game, rand)) {
       continue;
     }
     if (tryBuildAction(game, rand, waveIndex, counts, mapId, policy)) {
@@ -572,7 +645,8 @@ function captureTowerLayout(game) {
 function runSingle(seed, mapId, policyId) {
   const rand = createRng(seed);
   const policy = getPolicy(policyId);
-  const game = new HomelandGame({ mapId });
+  const game = new HomelandGame();
+  game.setMap(mapId, { ignoreUnlock: true, carryResources: false });
   let guard = 0;
 
   while (game.state !== 'map_result' && guard < 500000) {
@@ -617,6 +691,7 @@ function emptyAggregate() {
     leaksSum: 0,
     coinsSum: 0,
     xpSum: 0,
+    winCoinsSum: 0,
     winLeakSum: 0,
     winCount: 0,
     lossLeakSum: 0,
@@ -642,6 +717,7 @@ function mergeAggregate(a, b) {
     leaksSum: a.leaksSum + b.leaksSum,
     coinsSum: a.coinsSum + b.coinsSum,
     xpSum: a.xpSum + b.xpSum,
+    winCoinsSum: a.winCoinsSum + b.winCoinsSum,
     winLeakSum: a.winLeakSum + b.winLeakSum,
     winCount: a.winCount + b.winCount,
     lossLeakSum: a.lossLeakSum + b.lossLeakSum,
@@ -693,6 +769,7 @@ function finalizeAggregate(agg) {
     qualityWins: agg.qualityWins,
     avgLeaks: avg(agg.leaksSum, agg.runs),
     avgCoins: avg(agg.coinsSum, agg.runs),
+    avgWinCoins: avg(agg.winCoinsSum, agg.winCount),
     avgXp: avg(agg.xpSum, agg.runs),
     avgWinLeaks: avg(agg.winLeakSum, agg.winCount),
     avgLossLeaks: avg(agg.lossLeakSum, agg.lossCount),
@@ -889,6 +966,7 @@ function formatSummary(summary) {
     avgWinLeaks: Number(summary.avgWinLeaks.toFixed(2)),
     avgLossLeaks: Number(summary.avgLossLeaks.toFixed(2)),
     avgCoins: Number(summary.avgCoins.toFixed(0)),
+    avgWinCoins: Number(summary.avgWinCoins.toFixed(0)),
     avgXp: Number(summary.avgXp.toFixed(0)),
     towers: compactTowerSummary(summary),
   };
@@ -1256,6 +1334,7 @@ function runWorkerBatch() {
     }
     if (result.victory) {
       agg.winCount += 1;
+      agg.winCoinsSum += result.coins;
       agg.winLeakSum += result.leaked;
     } else {
       agg.lossCount += 1;
