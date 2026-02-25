@@ -122,6 +122,12 @@ Use a data-driven architecture so balancing and content expansion are easy.
 ## Balancing Coverage Rule
 
 - Balance validation must include diversity and controlled-variable checks, not only a single mixed policy run.
+- Map standard difficulty scale must use retained-coins Monte Carlo chaining:
+  - keep a retained-coins array `r[N]`,
+  - define `r[i]` as the minimal retained coins after passing Maps `1..i` in campaign Monte Carlo runs,
+  - for Map `i+1`, set simulation budget as `r[i] + initial[i+1]`,
+  - run Monte Carlo fleet simulations on Map `i+1` with this budget and record pass rate (`pass = fully neutralize all pirate boats`),
+  - scale difficulty toward target pass rate by tuning slot unlock price / tower slot price, fleet HP, fleet speed, and fleet specialties/wave composition.
 - Required coverage in a balancing cycle:
   - random baseline (`random_all` policy using initial map coins),
   - campaign retention baseline (about `100` random-policy runs per map, passing all previous maps first, then averaging retained coins),
@@ -138,8 +144,8 @@ Use a data-driven architecture so balancing and content expansion are easy.
   - Map 2 clear rate: ~85%
   - Map 3 clear rate: ~80%
   - Map 4 clear rate: ~77%
-  - Map 5 clear rate: ~75%
-  - Map 6 clear rate: ~70%
+  - Map 5 clear rate: `58% +/- 5%` (active revision target)
+  - Map 6 clear rate: derive from `r[5] + initial[6]` after Map 5 target is stabilized
 - Prefer enemy-side scaling for progression updates:
   - adjust enemy HP/speed/rewards, map `enemyScale`, leak penalties, and wave composition first;
   - avoid frequent tower-curve rewrites unless a tower role is fundamentally broken.

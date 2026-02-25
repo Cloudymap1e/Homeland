@@ -76,7 +76,7 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 - Campaign pass criteria standard:
   - one failed run deducts about `2` run-equivalents of progression XP,
   - expected unlock run targets scale by map index: `30`, `50`, `60`, `90`, `100`, `120`...
-  - Monte Carlo pass-rate targets decline with map difficulty (`Map 5: 75%`, `Map 6: 70%`).
+  - map pass rates are computed with retained-coins Monte Carlo chaining (`r[N]` standard; see balancing section below).
 - Map unlocks require both:
   - previous map(s) cleared in sequence,
   - required XP milestone.
@@ -270,8 +270,19 @@ Current random-policy balance intent (not strict hard limits):
 - Map 2 clear rate near 85%,
 - Map 3 clear rate near 80%,
 - Map 4 clear rate near 77%,
-- Map 5 clear rate near 75%,
-- Map 6 clear rate near 70%.
+- Map 5 clear rate near `58% +/- 5%` (active revision target),
+- Map 6 clear rate to be set after Map 5 is stabilized using `r[5] + initial[6]` budget.
+
+Map standard difficulty scale (`r[N]`):
+- Keep retained-coins array `r[N]`.
+- `r[i]` means the minimal retained coins after passing Maps `1..i` in campaign Monte Carlo.
+- For Map `i+1`, use simulation budget `r[i] + initial[i+1]`.
+- Run Monte Carlo fleet simulations for Map `i+1` using that budget and measure pass rate (`pass = fully neutralize all pirate boats`).
+- Use measured pass rate to scale difficulty by tuning:
+  - slot unlock price / tower slot price,
+  - fleet HP,
+  - fleet speed,
+  - fleet specialties and wave composition.
 
 Scaling policy for future iterations:
 - Keep tower level curves mostly stable for consistency.
