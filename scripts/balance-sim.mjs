@@ -2,6 +2,7 @@ import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { HomelandGame } from '../web/src/game-core.js';
+import { FastHomelandGame } from './fast-game-core.mjs';
 import { MAPS, DEFAULT_MAP_ID, TOWER_CONFIG } from '../web/src/config.js';
 
 const DEFAULT_RUNS = 1000;
@@ -225,6 +226,7 @@ function parseArgs(argv) {
     standardRuns: DEFAULT_STANDARD_RUNS,
     retentionPolicy: 'random_all',
     skipStandard: false,
+    engine: 'fast',
   };
 
   for (const arg of argv) {
@@ -260,6 +262,9 @@ function parseArgs(argv) {
       args.retentionPolicy = arg.split('=')[1];
     } else if (arg === '--skip-standard') {
       args.skipStandard = true;
+    } else if (arg.startsWith('--engine=')) {
+      const raw = arg.split('=')[1];
+      args.engine = raw === 'classic' ? 'classic' : 'fast';
     }
   }
   return args;
@@ -745,7 +750,10 @@ function runCurrentMap(game, rand, mapId, policyId) {
 
 function runSingle(seed, mapId, policyId, options = {}) {
   const rand = createRng(seed);
-  const game = new HomelandGame();
+  const engine = options.engine === 'classic' ? 'classic' : 'fast';
+  const game = engine === 'classic'
+    ? new HomelandGame()
+    : new FastHomelandGame({ rand });
   const carryResources = Boolean(options.carryResources);
   game.setMap(mapId, { ignoreUnlock: true, carryResources });
 
@@ -759,7 +767,7 @@ function runSingle(seed, mapId, policyId, options = {}) {
   return runCurrentMap(game, rand, mapId, policyId);
 }
 
-function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all') {
+function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all', engine = 'fast') {
   const targetIndex = MAP_INDEX.get(targetMapId);
   if (!Number.isInteger(targetIndex) || targetIndex < 0) {
     return {
@@ -771,7 +779,9 @@ function runCampaignRetentionBaseline(seed, targetMapId, policyId = 'random_all'
   }
 
   const rand = createRng(seed);
-  const game = new HomelandGame();
+  const game = engine === 'classic'
+    ? new HomelandGame()
+    : new FastHomelandGame({ rand });
   let lastOutcome = null;
   for (let mapIndex = 0; mapIndex < targetIndex; mapIndex += 1) {
     const mapId = MAP_ORDER[mapIndex];
@@ -1088,6 +1098,7 @@ async function runManyParallel({
   workers,
   multipliers,
   policyId,
+  engine = 'fast',
   startingCoinsOverride = null,
   startingXpOverride = null,
 }) {
@@ -1113,6 +1124,7 @@ async function runManyParallel({
             seedStart: cursor,
             multipliers,
             policyId,
+            engine,
             startingCoinsOverride,
             startingXpOverride,
           },
@@ -1145,6 +1157,7 @@ async function runRetentionParallel({
   workers,
   multipliers,
   policyId,
+  engine = 'fast',
 }) {
   if (runs <= 0) {
     return finalizeRetentionAggregate(emptyRetentionAggregate());
@@ -1168,6 +1181,7 @@ async function runRetentionParallel({
             seedStart: cursor,
             multipliers,
             policyId,
+            engine,
           },
         });
         cursor += count;
@@ -1222,7 +1236,15 @@ function formatSummary(summary) {
   };
 }
 
-async function runCandidate({ mapIds, runs, workers, multipliers, seedStart, policyId }) {
+async function runCandidate({
+  mapIds,
+  runs,
+  workers,
+  multipliers,
+  seedStart,
+  policyId,
+  engine = 'fast',
+}) {
   const byMap = {};
   for (const mapId of mapIds) {
     byMap[mapId] = await runManyParallel({
@@ -1232,12 +1254,13 @@ async function runCandidate({ mapIds, runs, workers, multipliers, seedStart, pol
       workers,
       multipliers,
       policyId,
+      engine,
     });
   }
   return byMap;
 }
 
-async function runSearch({ mapIds, searchRuns, workers, policyId }) {
+async function runSearch({ mapIds, searchRuns, workers, policyId, engine = 'fast' }) {
   let best = null;
   let bestInBand = null;
   const top = [];
@@ -1253,6 +1276,7 @@ async function runSearch({ mapIds, searchRuns, workers, policyId }) {
           multipliers,
           seedStart: 1,
           policyId,
+          engine,
         });
         const score = scoreCandidate(byMap, multipliers, mapIds);
         const entry = { multipliers, byMap, score };
@@ -1280,7 +1304,14 @@ async function runSearch({ mapIds, searchRuns, workers, policyId }) {
   return { best, bestInBand, top };
 }
 
-async function runScenarioMatrix({ mapIds, scenarioIds, runs, workers, multipliers }) {
+async function runScenarioMatrix({
+  mapIds,
+  scenarioIds,
+  runs,
+  workers,
+  multipliers,
+  engine = 'fast',
+}) {
   const matrix = {};
   for (const policyId of scenarioIds) {
     matrix[policyId] = await runCandidate({
@@ -1290,6 +1321,7 @@ async function runScenarioMatrix({ mapIds, scenarioIds, runs, workers, multiplie
       multipliers,
       seedStart: 101,
       policyId,
+      engine,
     });
   }
   return matrix;
@@ -1326,7 +1358,14 @@ function summarizeDiversityFindings(matrix, mapIds) {
   return findings;
 }
 
-async function runOatSensitivity({ mapIds, runs, workers, baseMultipliers, policyId }) {
+async function runOatSensitivity({
+  mapIds,
+  runs,
+  workers,
+  baseMultipliers,
+  policyId,
+  engine = 'fast',
+}) {
   const results = {};
   for (const [factor, values] of Object.entries(OAT_GRID)) {
     results[factor] = [];
@@ -1339,6 +1378,7 @@ async function runOatSensitivity({ mapIds, runs, workers, baseMultipliers, polic
         multipliers,
         seedStart: 501,
         policyId,
+        engine,
       });
       const aggregate = mapIds.reduce(
         (acc, mapId) => {
@@ -1379,6 +1419,7 @@ async function runPassCriteriaStandard({
   standardRuns,
   retentionPolicyId,
   evaluationPolicyId,
+  engine = 'fast',
 }) {
   const rows = [];
   const orderedMaps = MAP_ORDER.filter((mapId) => mapIds.includes(mapId));
@@ -1390,6 +1431,7 @@ async function runPassCriteriaStandard({
       workers,
       multipliers,
       policyId: retentionPolicyId,
+      engine,
     });
 
     const mapCfg = getMapById(mapId);
@@ -1406,6 +1448,7 @@ async function runPassCriteriaStandard({
       workers,
       multipliers,
       policyId: evaluationPolicyId,
+      engine,
       startingCoinsOverride: baseCoins,
     });
 
@@ -1514,6 +1557,7 @@ async function main() {
   console.log(`maps=${mapIds.join(', ')}`);
   console.log(`policy=${policyId}`);
   console.log(`suite=${args.suite}`);
+  console.log(`engine=${args.engine}`);
   if (args.cuda) {
     if (cudaDetected) {
       console.log('CUDA detected: using high-throughput mode with expanded worker parallelism.');
@@ -1529,13 +1573,20 @@ async function main() {
     multipliers: baselineMultipliers,
     seedStart: 1,
     policyId,
+    engine: args.engine,
   });
   printMapSet('Baseline (current tower values)', baseline, mapIds);
 
   let selectedMultipliers = baselineMultipliers;
   if (!args.skipSearch) {
     console.log('\nSearching multipliers...');
-    const search = await runSearch({ mapIds, searchRuns, workers, policyId });
+    const search = await runSearch({
+      mapIds,
+      searchRuns,
+      workers,
+      policyId,
+      engine: args.engine,
+    });
     const selected = search.bestInBand || search.best;
     selectedMultipliers = selected.multipliers;
 
@@ -1579,6 +1630,7 @@ async function main() {
     multipliers: selectedMultipliers,
     seedStart: 1,
     policyId,
+    engine: args.engine,
   });
   printMapSet('Full verification (selected multipliers)', verified, mapIds);
 
@@ -1596,6 +1648,7 @@ async function main() {
       standardRuns: args.standardRuns,
       retentionPolicyId,
       evaluationPolicyId: policyId,
+      engine: args.engine,
     });
     printPassCriteriaStandard(criteriaRows);
   } else if (args.skipStandard) {
@@ -1623,6 +1676,7 @@ async function main() {
       runs: diversityRuns,
       workers,
       multipliers: selectedMultipliers,
+      engine: args.engine,
     });
 
     for (const scenarioId of scenarioIds) {
@@ -1666,6 +1720,7 @@ async function main() {
       workers,
       baseMultipliers: selectedMultipliers,
       policyId,
+      engine: args.engine,
     });
     console.log(JSON.stringify(oat, null, 2));
   }
@@ -1706,6 +1761,7 @@ function runWorkerBatch() {
     seedStart,
     multipliers,
     policyId,
+    engine,
     startingCoinsOverride,
     startingXpOverride,
   } = workerData;
@@ -1716,6 +1772,7 @@ function runWorkerBatch() {
   let agg = emptyAggregate();
   for (let i = 0; i < runs; i += 1) {
     const result = runSingle(seedStart + i, mapId, policyId, {
+      engine,
       startingCoinsOverride,
       startingXpOverride,
     });
@@ -1747,13 +1804,13 @@ function runWorkerBatch() {
 }
 
 function runRetentionWorkerBatch() {
-  const { targetMapId, runs, seedStart, multipliers, policyId } = workerData;
+  const { targetMapId, runs, seedStart, multipliers, policyId, engine } = workerData;
   const snapshot = snapshotTunables();
   applyMultipliers(multipliers);
 
   let agg = emptyRetentionAggregate();
   for (let i = 0; i < runs; i += 1) {
-    const result = runCampaignRetentionBaseline(seedStart + i, targetMapId, policyId);
+    const result = runCampaignRetentionBaseline(seedStart + i, targetMapId, policyId, engine);
     agg.attempts += 1;
     if (result.reachedTarget) {
       agg.reachedTarget += 1;
