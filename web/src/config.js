@@ -1,5 +1,13 @@
 const MAX_TOWER_LEVEL = 50;
 const ANCHOR_LEVELS = [1, 10, 20, 30, 40, 50];
+const TOWER_RANGE_SCALE = 0.55;
+const SLOT_DENSITY_FACTOR = 2;
+const DENSIFY_OFFSETS = [
+  { x: 0.02, y: -0.016 },
+  { x: -0.02, y: 0.016 },
+  { x: 0.018, y: 0.018 },
+  { x: -0.018, y: -0.018 },
+];
 
 function roundTo(value, digits = 2) {
   return Number(value.toFixed(digits));
@@ -34,6 +42,38 @@ function floatFromAnchors(level, anchors, digits = 2) {
   return roundTo(interpolateAnchors(level, anchors), digits);
 }
 
+function scaledRangeFromAnchors(level, anchors) {
+  return roundTo(interpolateAnchors(level, anchors) * TOWER_RANGE_SCALE, 2);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function densifyBuildSlots(baseSlots, factor = SLOT_DENSITY_FACTOR) {
+  const copiesPerSlot = Math.max(1, Math.round(factor)) - 1;
+  if (copiesPerSlot <= 0) {
+    return baseSlots.slice();
+  }
+
+  const out = [];
+  const edgePad = 0.02;
+  for (let i = 0; i < baseSlots.length; i += 1) {
+    const slot = baseSlots[i];
+    out.push({ ...slot });
+    for (let copy = 0; copy < copiesPerSlot; copy += 1) {
+      const offset = DENSIFY_OFFSETS[(i + copy) % DENSIFY_OFFSETS.length];
+      const tweak = 1 + ((i + copy) % 3) * 0.08;
+      out.push({
+        id: `${slot.id}_d${copy + 1}`,
+        x: roundTo(clamp(slot.x + offset.x * tweak, edgePad, 1 - edgePad), 3),
+        y: roundTo(clamp(slot.y + offset.y * tweak, edgePad, 1 - edgePad), 3),
+      });
+    }
+  }
+  return out;
+}
+
 function costFromAnchors(level, anchors) {
   return Math.max(60, Math.round(intFromAnchors(level, anchors) / 5) * 5);
 }
@@ -45,7 +85,7 @@ function createArrowLevels() {
       level,
       cost: costFromAnchors(level, [460, 820, 1550, 2750, 4600, 7400]),
       damage: intFromAnchors(level, [40, 110, 206, 318, 455, 620]),
-      range: floatFromAnchors(level, [2.86, 3.06, 3.26, 3.46, 3.64, 3.82]),
+      range: scaledRangeFromAnchors(level, [2.86, 3.06, 3.26, 3.46, 3.64, 3.82]),
       attackSpeed: floatFromAnchors(level, [1.14, 1.5, 1.84, 2.18, 2.46, 2.8]),
     });
   }
@@ -59,7 +99,7 @@ function createBombLevels() {
       level,
       cost: costFromAnchors(level, [780, 1560, 2940, 5300, 9200, 15600]),
       damage: intFromAnchors(level, [112, 198, 324, 486, 682, 890]),
-      range: floatFromAnchors(level, [2.6, 2.75, 2.9, 3.05, 3.2, 3.35]),
+      range: scaledRangeFromAnchors(level, [2.6, 2.75, 2.9, 3.05, 3.2, 3.35]),
       attackSpeed: floatFromAnchors(level, [0.5, 0.61, 0.72, 0.85, 0.98, 1.1]),
       splashRadius: floatFromAnchors(level, [1.34, 1.52, 1.74, 1.96, 2.18, 2.4]),
       splashFalloff: intFromAnchors(level, [46, 45, 43, 41, 39, 36]),
@@ -75,7 +115,7 @@ function createFireLevels() {
       level,
       cost: costFromAnchors(level, [900, 2260, 4400, 8200, 14200, 23800]),
       damage: intFromAnchors(level, [42, 56, 82, 116, 156, 206]),
-      range: floatFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
+      range: scaledRangeFromAnchors(level, [2.8, 3.0, 3.2, 3.4, 3.6, 3.8]),
       attackSpeed: floatFromAnchors(level, [0.68, 0.81, 0.93, 1.04, 1.15, 1.26]),
       fireballDps: intFromAnchors(level, [40, 56, 84, 118, 162, 214]),
       fireballDuration: 3.0,
@@ -104,7 +144,7 @@ function createWindLevels() {
       level,
       cost: costFromAnchors(level, [820, 1560, 2920, 5300, 9300, 15600]),
       damage: intFromAnchors(level, [17, 62, 124, 194, 278, 374]),
-      range: floatFromAnchors(level, [3.05, 3.28, 3.5, 3.72, 3.94, 4.14]),
+      range: scaledRangeFromAnchors(level, [3.05, 3.28, 3.5, 3.72, 3.94, 4.14]),
       attackSpeed: floatFromAnchors(level, [0.9, 1.15, 1.4, 1.66, 1.94, 2.16]),
       slowPercent: intFromAnchors(level, [39, 54, 64, 72, 80, 86]),
       slowDuration: floatFromAnchors(level, [2.1, 2.6, 3.1, 3.5, 3.9, 4.4]),
@@ -134,7 +174,7 @@ function createLightningLevels() {
       level,
       cost: costFromAnchors(level, [960, 1760, 3340, 6260, 11400, 20500]),
       damage: intFromAnchors(level, [54, 112, 198, 318, 460, 648]),
-      range: floatFromAnchors(level, [2.76, 2.96, 3.16, 3.36, 3.56, 3.76]),
+      range: scaledRangeFromAnchors(level, [2.76, 2.96, 3.16, 3.36, 3.56, 3.76]),
       attackSpeed: floatFromAnchors(level, [0.76, 0.91, 1.06, 1.21, 1.36, 1.5]),
       chainCount: lightningChainsByLevel(level),
       chainFalloff: intFromAnchors(level, [38, 35, 32, 28, 24, 20]),
@@ -328,7 +368,7 @@ export const MAPS = {
       },
     ],
     defaultRouteWeights: [0.56, 0.44],
-    buildSlots: [
+    buildSlots: densifyBuildSlots([
       { id: 's01', x: 0.1, y: 0.48 },
       { id: 's02', x: 0.12, y: 0.77 },
       { id: 's03', x: 0.2, y: 0.54 },
@@ -343,7 +383,7 @@ export const MAPS = {
       { id: 's12', x: 0.82, y: 0.51 },
       { id: 's13', x: 0.9, y: 0.27 },
       { id: 's14', x: 0.92, y: 0.47 },
-    ],
+    ]),
     waves: map01Waves,
     fleetTarget: fleetCount(map01Waves),
   },
@@ -402,7 +442,7 @@ export const MAPS = {
       },
     ],
     defaultRouteWeights: [0.36, 0.42, 0.22],
-    buildSlots: [
+    buildSlots: densifyBuildSlots([
       { id: 's01', x: 0.09, y: 0.56 },
       { id: 's02', x: 0.11, y: 0.84 },
       { id: 's03', x: 0.19, y: 0.47 },
@@ -419,7 +459,7 @@ export const MAPS = {
       { id: 's14', x: 0.81, y: 0.57 },
       { id: 's15', x: 0.88, y: 0.28 },
       { id: 's16', x: 0.9, y: 0.52 },
-    ],
+    ]),
     waves: map02Waves,
     fleetTarget: fleetCount(map02Waves),
   },
@@ -502,7 +542,7 @@ export const MAPS = {
       },
     ],
     defaultRouteWeights: [0.28, 0.3, 0.23, 0.19],
-    buildSlots: [
+    buildSlots: densifyBuildSlots([
       { id: 's01', x: 0.06, y: 0.36 },
       { id: 's02', x: 0.08, y: 0.7 },
       { id: 's03', x: 0.13, y: 0.27 },
@@ -523,7 +563,7 @@ export const MAPS = {
       { id: 's18', x: 0.84, y: 0.19 },
       { id: 's19', x: 0.89, y: 0.44 },
       { id: 's20', x: 0.93, y: 0.62 },
-    ],
+    ]),
     waves: map03Waves,
     fleetTarget: fleetCount(map03Waves),
   },
@@ -622,7 +662,7 @@ export const MAPS = {
       },
     ],
     defaultRouteWeights: [0.23, 0.24, 0.2, 0.18, 0.15],
-    buildSlots: [
+    buildSlots: densifyBuildSlots([
       { id: 's01', x: 0.06, y: 0.42 },
       { id: 's02', x: 0.08, y: 0.67 },
       { id: 's03', x: 0.11, y: 0.86 },
@@ -647,7 +687,7 @@ export const MAPS = {
       { id: 's22', x: 0.89, y: 0.2 },
       { id: 's23', x: 0.91, y: 0.34 },
       { id: 's24', x: 0.93, y: 0.52 },
-    ],
+    ]),
     waves: map04Waves,
     fleetTarget: fleetCount(map04Waves),
   },
@@ -762,7 +802,7 @@ export const MAPS = {
       },
     ],
     defaultRouteWeights: [0.2, 0.18, 0.16, 0.14, 0.17, 0.15],
-    buildSlots: [
+    buildSlots: densifyBuildSlots([
       { id: 's01', x: 0.05, y: 0.39 },
       { id: 's02', x: 0.06, y: 0.65 },
       { id: 's03', x: 0.08, y: 0.83 },
@@ -791,7 +831,7 @@ export const MAPS = {
       { id: 's26', x: 0.91, y: 0.29 },
       { id: 's27', x: 0.92, y: 0.49 },
       { id: 's28', x: 0.94, y: 0.67 },
-    ],
+    ]),
     waves: map05Waves,
     fleetTarget: fleetCount(map05Waves),
   },
