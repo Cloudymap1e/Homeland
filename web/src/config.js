@@ -3,7 +3,6 @@ const ANCHOR_LEVELS = [1, 10, 20, 30, 40, 50];
 const TOWER_RANGE_SCALE = 0.55;
 const TOWER_DAMAGE_SCALE = 1.45;
 const TOWER_ATTACK_SPEED_SCALE = 1.16;
-const SLOT_DENSITY_FACTOR = 2;
 
 function roundTo(value, digits = 2) {
   return Number(value.toFixed(digits));
@@ -50,57 +49,10 @@ function scaleRate(value) {
   return roundTo(value * TOWER_ATTACK_SPEED_SCALE, 2);
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function densifyBuildSlots(baseSlots, factor = SLOT_DENSITY_FACTOR) {
-  const targetCount = Math.max(baseSlots.length, Math.round(baseSlots.length * factor));
-  if (targetCount <= baseSlots.length || baseSlots.length < 2) {
-    return baseSlots.slice();
-  }
-
-  const edgePad = 0.02;
-  const out = baseSlots.map((slot) => ({ ...slot }));
-  const segments = [];
-  for (let i = 0; i < baseSlots.length - 1; i += 1) {
-    const a = baseSlots[i];
-    const b = baseSlots[i + 1];
-    const len = Math.hypot(a.x - b.x, a.y - b.y);
-    segments.push({ a, b, len, index: i });
-  }
-  segments.sort((left, right) => right.len - left.len);
-  if (!segments.length) {
-    return out;
-  }
-
-  let extraIndex = 1;
-  let cursor = 0;
-  while (out.length < targetCount) {
-    const segment = segments[cursor % segments.length];
-    const phase = Math.floor(cursor / segments.length);
-    const t = phase % 2 === 0 ? 0.5 : (phase % 4 < 2 ? 0.36 : 0.64);
-    const midX = segment.a.x + (segment.b.x - segment.a.x) * t;
-    const midY = segment.a.y + (segment.b.y - segment.a.y) * t;
-    const vx = segment.b.x - segment.a.x;
-    const vy = segment.b.y - segment.a.y;
-    const vLen = Math.hypot(vx, vy) || 1;
-    const nx = -vy / vLen;
-    const ny = vx / vLen;
-    const centerDot = nx * (midX - 0.5) + ny * (midY - 0.5);
-    const sign = centerDot >= 0 ? 1 : -1;
-    const push = phase === 0 ? 0.024 : 0.017;
-    const x = roundTo(clamp(midX + nx * push * sign, edgePad, 1 - edgePad), 3);
-    const y = roundTo(clamp(midY + ny * push * sign, edgePad, 1 - edgePad), 3);
-    out.push({
-      id: `d${segment.index + 1}_${extraIndex}`,
-      x,
-      y,
-    });
-    extraIndex += 1;
-    cursor += 1;
-  }
-  return out;
+function densifyBuildSlots(baseSlots) {
+  // Slot coordinates are authored map data and must stay exact.
+  // Auto-generated slots caused invalid positions drifting into river lanes.
+  return baseSlots.map((slot) => ({ ...slot }));
 }
 
 function costFromAnchors(level, anchors) {

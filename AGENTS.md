@@ -58,6 +58,7 @@ Use a data-driven architecture so balancing and content expansion are easy.
 
 - Keep changes small and incremental.
 - Prefer config-first changes for balancing.
+- Build slot coordinates are authoritative map design data: slots must appear exactly at configured locations; do not auto-generate, densify, or offset slot positions from authored map coordinates.
 - Add or update docs whenever game rules change.
 - For any new mechanic, define:
   - player-facing behavior,

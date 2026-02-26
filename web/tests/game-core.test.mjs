@@ -123,6 +123,76 @@ test('leaks apply penalties and XP floors at zero', () => {
   assert.ok(game.xp >= 0);
 });
 
+test('leaking a wave does not hard-stop map progression or wipe towers', () => {
+  const game = new HomelandGame();
+  const slotId = 's01';
+  assert.equal(game.activateSlot(slotId).ok, true);
+  assert.equal(game.buildTower(slotId, 'arrow').ok, true);
+  assert.equal(game.startNextWave().ok, true);
+
+  const routeLength = game.routeInfos[0].pathInfo.length;
+  game.spawnQueue = [];
+  game.enemies = [{
+    id: 'forced_leak',
+    enemyType: 'raider',
+    hp: 999999,
+    maxHp: 999999,
+    speed: 20,
+    coinReward: 0,
+    xpReward: 0,
+    distance: routeLength - 0.02,
+    routeIndex: 0,
+    routeLength,
+    burnDps: 0,
+    burnDurationLeft: 0,
+    slowPercent: 0,
+    slowDurationLeft: 0,
+    shockDurationLeft: 0,
+  }];
+
+  game.tick(0.2);
+
+  assert.equal(game.state, 'build_phase');
+  assert.equal(game.result, null);
+  assert.equal(game.getTower(slotId)?.towerId, 'arrow');
+  assert.equal(game.startNextWave().ok, true);
+  assert.equal(game.waveIndex, 1);
+});
+
+test('final wave with leaks ends as map defeat', () => {
+  const game = new HomelandGame();
+  game.waveIndex = game.waves.length - 2;
+  assert.equal(game.startNextWave().ok, true);
+
+  const routeLength = game.routeInfos[0].pathInfo.length;
+  game.spawnQueue = [];
+  game.enemies = [{
+    id: 'final_wave_leak',
+    enemyType: 'raider',
+    hp: 999999,
+    maxHp: 999999,
+    speed: 20,
+    coinReward: 0,
+    xpReward: 0,
+    distance: routeLength - 0.02,
+    routeIndex: 0,
+    routeLength,
+    burnDps: 0,
+    burnDurationLeft: 0,
+    slowPercent: 0,
+    slowDurationLeft: 0,
+    shockDurationLeft: 0,
+  }];
+
+  game.tick(0.2);
+
+  assert.equal(game.state, 'map_result');
+  assert.equal(game.result?.victory, false);
+  assert.equal(game.result?.reason, 'leaks');
+  assert.ok((game.result?.leaked || 0) >= 1);
+  assert.equal(game.completedMaps.has(game.mapConfig.mapId), false);
+});
+
 test('wind tower slows 3/5/6 targets by level', () => {
   const game = new HomelandGame();
 
