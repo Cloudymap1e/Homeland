@@ -836,29 +836,41 @@ function applyPersistedProgress(payload) {
 async function hydrateProgressOptimized() {
   const local = readLocalProgress();
   let appliedPayload = null;
+  let appliedTs = 0;
   if (local && applyPersistedProgress(local)) {
     appliedPayload = local;
+    appliedTs = Number(local.updatedAt) || 0;
     lastPersistedFingerprint = createProgressFingerprint(local);
   }
 
-  const remote = await fetchServerProgress({ timeoutMs: REMOTE_PROGRESS_TIMEOUT_MS });
-  if (!remote) {
-    return;
-  }
-
-  if (hasLocalMutationsSinceBoot) {
-    return;
-  }
-
-  const remoteTs = Number(remote.updatedAt) || 0;
-  const appliedTs = Number(appliedPayload?.updatedAt) || 0;
-  if (appliedPayload && remoteTs <= appliedTs) {
-    return;
-  }
-
-  if (applyPersistedProgress(remote)) {
+  const applyRemoteIfNewer = (remote) => {
+    if (!remote || hasLocalMutationsSinceBoot) {
+      return false;
+    }
+    const remoteTs = Number(remote.updatedAt) || 0;
+    if (appliedPayload && remoteTs <= appliedTs) {
+      return false;
+    }
+    if (!applyPersistedProgress(remote)) {
+      return false;
+    }
+    appliedPayload = remote;
+    appliedTs = remoteTs;
     lastPersistedFingerprint = createProgressFingerprint(remote);
+    return true;
+  };
+
+  const fastRemote = await fetchServerProgress({ timeoutMs: REMOTE_PROGRESS_TIMEOUT_MS });
+  if (applyRemoteIfNewer(fastRemote)) {
+    return;
   }
+
+  // Slow-path retry without timeout keeps startup responsive while still reconciling stale local state.
+  fetchServerProgress()
+    .then((remote) => {
+      applyRemoteIfNewer(remote);
+    })
+    .catch(() => {});
 }
 
 async function persistProgressNow(keepalive = false) {
