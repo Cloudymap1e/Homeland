@@ -193,6 +193,63 @@ test('final wave with leaks ends as map defeat', () => {
   assert.equal(game.completedMaps.has(game.mapConfig.mapId), false);
 });
 
+test('negative coins do not hard-stop run and next wave can still start', () => {
+  const game = new HomelandGame();
+  game.coins = 10;
+  assert.equal(game.startNextWave().ok, true);
+
+  const routeLength = game.routeInfos[0].pathInfo.length;
+  game.spawnQueue = [];
+  game.enemies = [{
+    id: 'neg_coin_leak',
+    enemyType: 'raider',
+    hp: 999999,
+    maxHp: 999999,
+    speed: 20,
+    coinReward: 0,
+    xpReward: 0,
+    distance: routeLength - 0.02,
+    routeIndex: 0,
+    routeLength,
+    burnDps: 0,
+    burnDurationLeft: 0,
+    slowPercent: 0,
+    slowDurationLeft: 0,
+    shockDurationLeft: 0,
+  }];
+
+  game.tick(0.2);
+  assert.ok(game.coins < 0);
+  assert.equal(game.state, 'build_phase');
+  assert.equal(game.result, null);
+  assert.equal(game.startNextWave().ok, true);
+});
+
+test('selling tower refunds 70% of total tower build and upgrade costs', () => {
+  const game = new HomelandGame();
+  const slotCost = game.getSlotActivationCost('s01');
+  const level1Cost = TOWER_CONFIG.arrow.levels[0].cost;
+  const level2Cost = TOWER_CONFIG.arrow.levels[1].cost;
+  const totalTowerCost = level1Cost + level2Cost;
+  const expectedRefund = Math.round(totalTowerCost * 0.7);
+
+  assert.equal(game.activateSlot('s01').ok, true);
+  assert.equal(game.buildTower('s01', 'arrow').ok, true);
+  assert.equal(game.upgradeTower('s01').ok, true);
+  const coinsBeforeSell = game.coins;
+
+  const sell = game.sellTower('s01');
+  assert.equal(sell.ok, true);
+  assert.equal(sell.refund, expectedRefund);
+  assert.equal(game.coins, coinsBeforeSell + expectedRefund);
+  assert.equal(game.getTower('s01'), null);
+  assert.equal(game.isSlotActivated('s01'), true);
+  assert.equal(
+    game.coins,
+    game.mapConfig.startingCoins - slotCost - totalTowerCost + expectedRefund
+  );
+});
+
 test('wind tower slows 3/5/6 targets by level', () => {
   const game = new HomelandGame();
 

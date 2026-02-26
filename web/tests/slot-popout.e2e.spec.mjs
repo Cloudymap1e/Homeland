@@ -146,11 +146,54 @@ test('failed wave keeps campaign run resumable without reset wipe', async ({ pag
     await page.waitForTimeout(80);
   }
 
-  await expect(page.locator('#coins-overlay')).toHaveText('0');
+  const coinsAfterFailText = await page.locator('#coins-overlay').innerText();
+  const coinsAfterFail = Number(coinsAfterFailText.replaceAll(',', ''));
+  expect(coinsAfterFail).toBeLessThan(0);
   await expect(page.locator('#state-overlay')).toHaveText('Build');
   await expect(page.locator('#wave-overlay')).toHaveText('1/20');
 
   await page.locator('#start-wave').click();
   await expect(page.locator('#wave-overlay')).toHaveText('2/20');
   await expect(page.locator('#state-overlay')).toHaveText('Wave Live');
+});
+
+test('tower can be sold for 70 percent refund from slot popout', async ({ page }) => {
+  await page.request.delete(`${BASE_URL}/api/progress`);
+  await page.goto(BASE_URL);
+
+  const canvas = page.locator('#game');
+  const canvasBox = await canvas.boundingBox();
+  if (!canvasBox) {
+    throw new Error('Canvas is not visible for interaction.');
+  }
+
+  const slotX = canvasBox.x + canvasBox.width * 0.1;
+  const slotY = canvasBox.y + canvasBox.height * 0.48;
+  await page.mouse.click(slotX, slotY);
+
+  await expect(page.locator('#slot-popout')).toBeVisible();
+  const coinTextBefore = await page.locator('#coins-overlay').innerText();
+  const coinsBefore = Number(coinTextBefore.replaceAll(',', ''));
+
+  const activateButton = page.locator('#slot-popout .slot-option').first();
+  const activateLabel = await activateButton.innerText();
+  const activateCost = Number((activateLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
+  await activateButton.click();
+
+  const buildButton = page.locator('#slot-popout .slot-option').first();
+  const buildLabel = await buildButton.innerText();
+  const buildCost = Number((buildLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
+  await buildButton.click();
+
+  const sellButton = page.locator('#slot-popout .slot-option').filter({ hasText: 'Sell Tower' }).first();
+  const sellLabel = await sellButton.innerText();
+  const sellValue = Number((sellLabel.match(/\+\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
+  await sellButton.click();
+
+  await expect(page.locator('#slot-popout h3')).toHaveText(/Build Slot/);
+  const coinTextAfterSell = await page.locator('#coins-overlay').innerText();
+  const coinsAfterSell = Number(coinTextAfterSell.replaceAll(',', ''));
+
+  expect(sellValue).toBe(Math.round(buildCost * 0.7));
+  expect(coinsAfterSell).toBe(coinsBefore - activateCost - buildCost + sellValue);
 });
