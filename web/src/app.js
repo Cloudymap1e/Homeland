@@ -1141,6 +1141,8 @@ function renderSlotPopout(slotId = selectedSlotId) {
     const canUpgrade = tower.level < cfg.levels.length;
     const nextCost = canUpgrade ? cfg.levels[tower.level].cost : 0;
     const disabled = !canUpgrade || !buildPhase || game.coins < nextCost;
+    const sellValue = game.getTowerSellValue(slot.id);
+    const sellDisabled = !buildPhase;
 
     selectedTowerId = tower.towerId;
     selectedCurveTowerId = tower.towerId;
@@ -1157,6 +1159,19 @@ function renderSlotPopout(slotId = selectedSlotId) {
           scheduleProgressPersist();
         },
         disabled
+      )
+    );
+    actions.appendChild(
+      createPopoutAction(
+        `Sell Tower +${formatNumber(sellValue)}c`,
+        'Refund 70% of total tower build and upgrade costs.',
+        () => {
+          const result = game.sellTower(slot.id);
+          slotPopoutNotice = result.ok ? '' : result.error;
+          updateHud();
+          scheduleProgressPersist();
+        },
+        sellDisabled
       )
     );
   }

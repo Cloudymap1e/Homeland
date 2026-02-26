@@ -583,6 +583,44 @@ export class HomelandGame {
     return { ok: true };
   }
 
+  getTowerInvestment(slotId) {
+    const tower = this.towers.get(slotId);
+    if (!tower) {
+      return 0;
+    }
+    const cfg = TOWER_CONFIG[tower.towerId];
+    if (!cfg) {
+      return 0;
+    }
+    let total = 0;
+    for (let i = 0; i < tower.level; i += 1) {
+      const levelCfg = cfg.levels[i];
+      if (!levelCfg) {
+        break;
+      }
+      total += levelCfg.cost;
+    }
+    return Math.max(0, Math.round(total));
+  }
+
+  getTowerSellValue(slotId) {
+    return Math.max(0, Math.round(this.getTowerInvestment(slotId) * 0.7));
+  }
+
+  sellTower(slotId) {
+    if (!['build_phase', 'wave_running', 'wave_result'].includes(this.state)) {
+      return { ok: false, error: 'Cannot sell in current state.' };
+    }
+    const tower = this.towers.get(slotId);
+    if (!tower) {
+      return { ok: false, error: 'No tower selected.' };
+    }
+    const refund = this.getTowerSellValue(slotId);
+    this.towers.delete(slotId);
+    this.coins += refund;
+    return { ok: true, refund };
+  }
+
   startNextWave() {
     if (!['build_phase', 'wave_result'].includes(this.state)) {
       return { ok: false, error: 'Cannot start wave in this state.' };
@@ -897,7 +935,7 @@ export class HomelandGame {
       enemy.distance += enemy.speed * slowMultiplier * dt;
 
       if (enemy.distance >= enemy.routeLength) {
-        this.coins = Math.max(0, this.coins - this.mapConfig.leakPenalty.coins);
+        this.coins -= this.mapConfig.leakPenalty.coins;
         this.xp = Math.max(0, this.xp - this.mapConfig.leakPenalty.xp);
         this.currentWaveLeaks += 1;
         this.stats.leaked += 1;

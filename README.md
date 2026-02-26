@@ -66,11 +66,13 @@ If enemies pass through, the player is penalized (coins and XP deduction).
   - slot activation (pay once per slot per map run)
   - tower placement (after slot activation)
   - tower upgrades
+  - tower sales refund at `70%` of total tower build/upgrade cost
 - Coins are gained from:
   - destroying enemy boats
   - completing waves/maps (map clear rewards included)
 - Coins are lost from:
   - leak penalties
+- Coins can go negative during heavy leaks; run continues and player can recover by selling towers.
 
 ### XP Progression
 

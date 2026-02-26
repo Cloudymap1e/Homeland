@@ -560,7 +560,7 @@ export class FastHomelandGame {
       const payload = this.buildGpuWavePayload(wave);
       const result = this.gpuWaveSim(payload);
 
-      this.coins = Math.max(0, Number(result.coins) || 0);
+      this.coins = Number(result.coins) || 0;
       this.xp = Math.max(0, Number(result.xp) || 0);
       this.stats.spawned += payload.enemyQueue.length;
       this.stats.killed += Math.max(0, Math.round(Number(result.killed) || 0));
@@ -1098,7 +1098,7 @@ export class FastHomelandGame {
       const slowMultiplier = 1 - Math.min(this.enemySlowPercent[i] / 100, 0.84);
       this.enemyDistance[i] += this.enemySpeed[i] * slowMultiplier * dt;
       if (this.enemyDistance[i] >= this.enemyRouteLength[i]) {
-        this.coins = Math.max(0, this.coins - this.mapConfig.leakPenalty.coins);
+        this.coins -= this.mapConfig.leakPenalty.coins;
         this.xp = Math.max(0, this.xp - this.mapConfig.leakPenalty.xp);
         this.currentWaveLeaks += 1;
         this.stats.leaked += 1;
