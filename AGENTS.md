@@ -109,6 +109,45 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Test command: `npm test`.
 - Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
 
+## Codebase Map (Current)
+
+- `web/` = active playable runtime.
+- `web/src/app.js` = canvas UI + HUD + persistence wiring.
+- `web/src/game-core.js` = game state, waves, combat, placement, economy, progression.
+- `web/src/config.js` = data-driven balance (maps, towers, enemies, wave plans, pass criteria).
+- `functions/api/progress.js` = Cloudflare Pages Function for `/api/progress`.
+- `schema/progress.sql` = D1 schema (`sessions`, `ip_index`).
+- `scripts/` = build/dev tooling, performance harness, Monte Carlo balancing, CUDA/GPU wave runner.
+- `src/homeland/` = legacy Python prototype (reference only).
+- `web/tests/` = Node test suite + Playwright e2e.
+- `tests/` = legacy Python tests (reference-only).
+
+## Gameplay Architecture (As Implemented)
+
+- Core loop is fully implemented in `web/src/game-core.js` and driven by `web/src/app.js`.
+- Balance/config is centralized in `web/src/config.js` (maps, towers, enemies, wave plans, pass criteria).
+- Map slots are filtered into buildable vs blocked by river clearance on load; authored coordinates must remain exact.
+- Tower IDs: `arrow`, `bone` (Bomb Tower), `magic_fire`, `magic_wind`, `magic_lightning`.
+
+## Persistence & Progress
+
+- Client persists to `/api/progress` (Cloudflare Pages Function) and mirrors to `localStorage` as fallback.
+- Session identity is stored in `homeland_sid` cookie; IP fallback is used if cookie missing.
+- D1 binding name is `PROGRESS_DB`; schema lives in `schema/progress.sql`.
+- Migration tooling: `scripts/migrate-progress-to-d1.mjs` reads `.data/player-progress.json` and writes `.data/d1-progress-migration.sql`.
+
+## Testing
+
+- Unit tests: `npm test` (Node test runner over `web/tests/*.test.mjs`).
+- E2E: `npm run test:e2e` (Playwright slot popout spec).
+
+## Production Path (Primary)
+
+- Cloudflare Pages + Functions + D1 is the primary deploy target.
+- Build: `npm run build:web`
+- Deploy: `npm run pages:deploy`
+- Ensure `wrangler.toml` has real D1 `database_id` and `preview_database_id`.
+
 ## Monte Carlo Balancing (GS75 CUDA-First Rule)
 
 - When running any Monte Carlo balancing simulation on machine `GS75`, CUDA must be prioritized first.
