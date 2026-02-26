@@ -55,7 +55,7 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 - Penalties:
   - coin deduction
   - XP deduction
-  - both values floor at `0` (no negative balances)
+  - XP floors at `0` (coins may go negative)
 - Progression unlock: next map requires minimum XP threshold.
 
 ## Economy and Progression
@@ -346,7 +346,26 @@ For direct CLI use, `balance-sim` accepts `--engine=classic|fast|gpu` (default `
 
 Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.
 
-## Cloudflare Tunnel Publish
+Load and startup performance harness:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run perf:load
+```
+
+This writes:
+- `docs/perf/load-metrics-YYYYMMDD.json`
+- `docs/perf/baseline-YYYYMMDD.json`
+
+Build optimized production assets (hashed JS/CSS + cache headers):
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run build:web
+npm run preview:web
+```
+
+## Cloudflare Pages + D1 (Primary Production Path)
 
 Target hostname: `homeland.secana.top`
 
@@ -354,12 +373,40 @@ Use the currently active `secana.top` Cloudflare zone. Do not change nameservers
 
 ```bash
 cd /Users/rc/Project/Homeland
+npx wrangler whoami
+npx wrangler d1 create homeland-progress
+# Update wrangler.toml with real database_id and preview_database_id values.
+npx wrangler d1 execute homeland-progress --file schema/progress.sql
+npm run build:web
+npm run pages:deploy
+```
+
+Pages runtime API:
+- `functions/api/progress.js` keeps `/api/progress` response schema compatible.
+- D1 binding name: `PROGRESS_DB`.
+
+Progress migration to D1:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run migrate:d1 -- --db=homeland-progress --apply --verify --truncate
+```
+
+Migration script:
+- source: `.data/player-progress.json`
+- output SQL: `.data/d1-progress-migration.sql`
+- preserves `createdAt`, `updatedAt`, `lastIp`, and exact progress payload JSON.
+
+## Cloudflare Tunnel Publish (Fallback / Rollback)
+
+Keep tunnel scripts available for rollback windows or emergency routing:
+
+```bash
+cd /Users/rc/Project/Homeland
 ./scripts/cloudflare-tunnel-setup.sh
 npm run dev
 ./scripts/cloudflare-tunnel-run.sh
 ```
-
-`cloudflare-tunnel-setup.sh` writes project-local tunnel config at `/Users/rc/Project/Homeland/.cloudflared/config.yml` to avoid collisions with other projects.
 
 Quick public URL without DNS mapping:
 
@@ -372,4 +419,7 @@ npm run tunnel:quick
 ## Current Status
 
 JS prototype core loop is implemented and tested.
-Cloudflare tunnel scripts/config templates are included for `homeland.secana.top`.
+Primary production path now includes:
+- bundled static output in `dist/`,
+- Cloudflare Pages Functions API under `functions/api/`,
+- D1 schema + migration tooling for progress persistence.
