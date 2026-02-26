@@ -1,0 +1,990 @@
+{
+  "startedAt": "2026-02-26T11:21:51.442Z",
+  "runsPerUrl": 10,
+  "timeoutMs": 60000,
+  "urls": {
+    "http://127.0.0.1:4173": {
+      "summary": {
+        "sampleSize": 10,
+        "interactive": {
+          "min": 51.3,
+          "p50": 80.1,
+          "p95": 182.3,
+          "max": 182.3
+        },
+        "load": {
+          "p50": 32.1,
+          "p95": 111.4
+        },
+        "hudReady": {
+          "p50": 80.1,
+          "p95": 182.3
+        }
+      },
+      "runs": [
+        {
+          "runId": 1,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 183,
+          "hudReadyMs": 182.3,
+          "interactiveMs": 182.3,
+          "domInteractiveMs": 28,
+          "domContentLoadedMs": 110.8,
+          "loadMs": 111.4,
+          "fcpMs": 68,
+          "fpMs": 68,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 19.6,
+              "durationMs": 10.5,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 19.9,
+              "durationMs": 10.5,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 52.2,
+              "durationMs": 4.9,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 52.2,
+              "durationMs": 5.4,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 110.5,
+              "durationMs": 1.2,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 182.3
+        },
+        {
+          "runId": 2,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 80,
+          "hudReadyMs": 79.7,
+          "interactiveMs": 79.7,
+          "domInteractiveMs": 3.9,
+          "domContentLoadedMs": 31.8,
+          "loadMs": 32.1,
+          "fcpMs": 56,
+          "fpMs": 56,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.6,
+              "durationMs": 1.6,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.7,
+              "durationMs": 1.6,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.5,
+              "durationMs": 0.9,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.5,
+              "durationMs": 0.9,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.7,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 79.7
+        },
+        {
+          "runId": 3,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 84,
+          "hudReadyMs": 83.4,
+          "interactiveMs": 83.4,
+          "domInteractiveMs": 4,
+          "domContentLoadedMs": 33.6,
+          "loadMs": 33.8,
+          "fcpMs": 60,
+          "fpMs": 60,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.6,
+              "durationMs": 1.4,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.7,
+              "durationMs": 1.6,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.5,
+              "durationMs": 0.7,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.5,
+              "durationMs": 0.8,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 33.4,
+              "durationMs": 0.8,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 83.4
+        },
+        {
+          "runId": 4,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 82,
+          "hudReadyMs": 81.9,
+          "interactiveMs": 81.9,
+          "domInteractiveMs": 3.8,
+          "domContentLoadedMs": 32.2,
+          "loadMs": 32.4,
+          "fcpMs": 56,
+          "fpMs": 56,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.5,
+              "durationMs": 1.5,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.5,
+              "durationMs": 1.6,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.5,
+              "durationMs": 0.9,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.5,
+              "durationMs": 1,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 32.1,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 81.9
+        },
+        {
+          "runId": 5,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 82,
+          "hudReadyMs": 81.6,
+          "interactiveMs": 81.6,
+          "domInteractiveMs": 4.2,
+          "domContentLoadedMs": 33,
+          "loadMs": 33.2,
+          "fcpMs": 60,
+          "fpMs": 60,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.7,
+              "durationMs": 1.6,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.8,
+              "durationMs": 1.7,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.6,
+              "durationMs": 0.7,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.6,
+              "durationMs": 0.9,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 32.9,
+              "durationMs": 0.6,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 81.6
+        },
+        {
+          "runId": 6,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 81,
+          "hudReadyMs": 80.1,
+          "interactiveMs": 80.1,
+          "domInteractiveMs": 3.9,
+          "domContentLoadedMs": 31.4,
+          "loadMs": 31.7,
+          "fcpMs": 60,
+          "fpMs": 60,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.5,
+              "durationMs": 1.2,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.6,
+              "durationMs": 1.3,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 4.9,
+              "durationMs": 1.1,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5,
+              "durationMs": 1,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.3,
+              "durationMs": 0.8,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 80.1
+        },
+        {
+          "runId": 7,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 52,
+          "hudReadyMs": 51.8,
+          "interactiveMs": 51.8,
+          "domInteractiveMs": 3.8,
+          "domContentLoadedMs": 31.7,
+          "loadMs": 31.9,
+          "fcpMs": null,
+          "fpMs": null,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.5,
+              "durationMs": 1.3,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.5,
+              "durationMs": 1.4,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5,
+              "durationMs": 1.1,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5,
+              "durationMs": 1.1,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.7,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 51.8
+        },
+        {
+          "runId": 8,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 83,
+          "hudReadyMs": 82.6,
+          "interactiveMs": 82.6,
+          "domInteractiveMs": 4.1,
+          "domContentLoadedMs": 31.8,
+          "loadMs": 32,
+          "fcpMs": 56,
+          "fpMs": 56,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.7,
+              "durationMs": 1.5,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.8,
+              "durationMs": 1.5,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.6,
+              "durationMs": 0.9,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.6,
+              "durationMs": 0.9,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.8,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 82.6
+        },
+        {
+          "runId": 9,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 52,
+          "hudReadyMs": 51.3,
+          "interactiveMs": 51.3,
+          "domInteractiveMs": 3.9,
+          "domContentLoadedMs": 31.4,
+          "loadMs": 31.6,
+          "fcpMs": null,
+          "fpMs": null,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.6,
+              "durationMs": 1.5,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.6,
+              "durationMs": 1.7,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.4,
+              "durationMs": 1,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.4,
+              "durationMs": 0.9,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.4,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 51.3
+        },
+        {
+          "runId": 10,
+          "url": "http://127.0.0.1:4173",
+          "wallElapsedMs": 80,
+          "hudReadyMs": 79.7,
+          "interactiveMs": 79.7,
+          "domInteractiveMs": 3.9,
+          "domContentLoadedMs": 32,
+          "loadMs": 32.2,
+          "fcpMs": 56,
+          "fpMs": 56,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "http://127.0.0.1:4173/styles.css",
+              "startMs": 2.7,
+              "durationMs": 1.5,
+              "transferSize": 8419
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/app.js?v=campaign-pass-4",
+              "startMs": 2.8,
+              "durationMs": 1.5,
+              "transferSize": 74728
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/game-core.js",
+              "startMs": 5.5,
+              "durationMs": 1,
+              "transferSize": 32661
+            },
+            {
+              "name": "http://127.0.0.1:4173/src/config.js",
+              "startMs": 5.5,
+              "durationMs": 1,
+              "transferSize": 27324
+            },
+            {
+              "name": "http://127.0.0.1:4173/api/progress",
+              "startMs": 31.9,
+              "durationMs": 0.7,
+              "transferSize": 903
+            }
+          ],
+          "nowMs": 79.7
+        }
+      ]
+    },
+    "https://homeland.secana.top": {
+      "summary": {
+        "sampleSize": 10,
+        "interactive": {
+          "min": 10716.6,
+          "p50": 12734.9,
+          "p95": 26442.7,
+          "max": 26442.7
+        },
+        "load": {
+          "p50": 12686.4,
+          "p95": 26391.8
+        },
+        "hudReady": {
+          "p50": 12734.9,
+          "p95": 26442.7
+        }
+      },
+      "runs": [
+        {
+          "runId": 1,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 11624,
+          "hudReadyMs": 11623.4,
+          "interactiveMs": 11623.4,
+          "domInteractiveMs": 2325.9,
+          "domContentLoadedMs": 11568.2,
+          "loadMs": 11568.7,
+          "fcpMs": 4136,
+          "fpMs": 4136,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 2321.4,
+              "durationMs": 1775.1,
+              "transferSize": 2908
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 2321.6,
+              "durationMs": 5423.1,
+              "transferSize": 21331
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 7747,
+              "durationMs": 3742.1,
+              "transferSize": 8897
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 7747.2,
+              "durationMs": 3760.1,
+              "transferSize": 6579
+            }
+          ],
+          "nowMs": 11623.4
+        },
+        {
+          "runId": 2,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 20851,
+          "hudReadyMs": 20844.2,
+          "interactiveMs": 20844.2,
+          "domInteractiveMs": 3014.9,
+          "domContentLoadedMs": 20769.5,
+          "loadMs": 20769.6,
+          "fcpMs": 6692,
+          "fpMs": 6692,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 3009.3,
+              "durationMs": 3640.5,
+              "transferSize": 2909
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 3009.4,
+              "durationMs": 11906.5,
+              "transferSize": 20755
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 14917.6,
+              "durationMs": 5595.1,
+              "transferSize": 9002
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 14917.8,
+              "durationMs": 5785.5,
+              "transferSize": 6507
+            }
+          ],
+          "nowMs": 20844.2
+        },
+        {
+          "runId": 3,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 12856,
+          "hudReadyMs": 12855,
+          "interactiveMs": 12855,
+          "domInteractiveMs": 1529.6,
+          "domContentLoadedMs": 12800.2,
+          "loadMs": 12800.2,
+          "fcpMs": 3700,
+          "fpMs": 3700,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 1524.8,
+              "durationMs": 2134.5,
+              "transferSize": 2915
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 1524.9,
+              "durationMs": 5059.6,
+              "transferSize": 21456
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 6586.7,
+              "durationMs": 6170.4,
+              "transferSize": 8944
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 6586.8,
+              "durationMs": 5295.2,
+              "transferSize": 6342
+            }
+          ],
+          "nowMs": 12855
+        },
+        {
+          "runId": 4,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 10920,
+          "hudReadyMs": 10919.5,
+          "interactiveMs": 10919.5,
+          "domInteractiveMs": 3246.6,
+          "domContentLoadedMs": 10859.6,
+          "loadMs": 10859.7,
+          "fcpMs": 4924,
+          "fpMs": 4924,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 3242.4,
+              "durationMs": 1647,
+              "transferSize": 2925
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 3242.5,
+              "durationMs": 3714.1,
+              "transferSize": 22050
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 6959.1,
+              "durationMs": 3819,
+              "transferSize": 8896
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 6959.1,
+              "durationMs": 3847.5,
+              "transferSize": 6515
+            }
+          ],
+          "nowMs": 10919.5
+        },
+        {
+          "runId": 5,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 10718,
+          "hudReadyMs": 10716.6,
+          "interactiveMs": 10716.6,
+          "domInteractiveMs": 1833.9,
+          "domContentLoadedMs": 10664.8,
+          "loadMs": 10664.9,
+          "fcpMs": 3288,
+          "fpMs": 3288,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 1829.5,
+              "durationMs": 1419.6,
+              "transferSize": 2969
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 1829.7,
+              "durationMs": 4984.2,
+              "transferSize": 21181
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 6815.2,
+              "durationMs": 3807.3,
+              "transferSize": 8816
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 6815.2,
+              "durationMs": 3807.5,
+              "transferSize": 6444
+            }
+          ],
+          "nowMs": 10716.6
+        },
+        {
+          "runId": 6,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 26443,
+          "hudReadyMs": 26442.7,
+          "interactiveMs": 26442.7,
+          "domInteractiveMs": 3090.6,
+          "domContentLoadedMs": 26391.7,
+          "loadMs": 26391.8,
+          "fcpMs": 7220,
+          "fpMs": 7220,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 3085.2,
+              "durationMs": 4089.4,
+              "transferSize": 2897
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 3085.4,
+              "durationMs": 11995.5,
+              "transferSize": 20896
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 15083.1,
+              "durationMs": 10611.6,
+              "transferSize": 9020
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 15083.2,
+              "durationMs": 11249.2,
+              "transferSize": 6514
+            }
+          ],
+          "nowMs": 26442.7
+        },
+        {
+          "runId": 7,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 15008,
+          "hudReadyMs": 15007.3,
+          "interactiveMs": 15007.3,
+          "domInteractiveMs": 3663.4,
+          "domContentLoadedMs": 14953.5,
+          "loadMs": 14953.6,
+          "fcpMs": 6920,
+          "fpMs": 6920,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 3658.6,
+              "durationMs": 3221.8,
+              "transferSize": 2872
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 3658.7,
+              "durationMs": 8071.6,
+              "transferSize": 21513
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 11732.6,
+              "durationMs": 2881.8,
+              "transferSize": 9030
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 11732.7,
+              "durationMs": 3159.7,
+              "transferSize": 6425
+            }
+          ],
+          "nowMs": 15007.3
+        },
+        {
+          "runId": 8,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 12736,
+          "hudReadyMs": 12734.9,
+          "interactiveMs": 12734.9,
+          "domInteractiveMs": 1516.9,
+          "domContentLoadedMs": 12686.2,
+          "loadMs": 12686.4,
+          "fcpMs": 3704,
+          "fpMs": 3704,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 1512,
+              "durationMs": 2151.4,
+              "transferSize": 2983
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 1512.1,
+              "durationMs": 6380.1,
+              "transferSize": 21027
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 7894.7,
+              "durationMs": 4735.5,
+              "transferSize": 9276
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 7894.8,
+              "durationMs": 4390.5,
+              "transferSize": 6514
+            }
+          ],
+          "nowMs": 12734.9
+        },
+        {
+          "runId": 9,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 12585,
+          "hudReadyMs": 12584,
+          "interactiveMs": 12584,
+          "domInteractiveMs": 1623.7,
+          "domContentLoadedMs": 12534.2,
+          "loadMs": 12534.2,
+          "fcpMs": 3504,
+          "fpMs": 3504,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 1619.5,
+              "durationMs": 1844.9,
+              "transferSize": 2949
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 1619.6,
+              "durationMs": 6109.1,
+              "transferSize": 21381
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 7731.2,
+              "durationMs": 4745.3,
+              "transferSize": 9033
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 7731.3,
+              "durationMs": 4264.3,
+              "transferSize": 6581
+            }
+          ],
+          "nowMs": 12584
+        },
+        {
+          "runId": 10,
+          "url": "https://homeland.secana.top",
+          "wallElapsedMs": 13319,
+          "hudReadyMs": 13318.8,
+          "interactiveMs": 13318.8,
+          "domInteractiveMs": 1609,
+          "domContentLoadedMs": 13267.5,
+          "loadMs": 13267.5,
+          "fcpMs": 3800,
+          "fpMs": 3800,
+          "hud": {
+            "coins": "10,000",
+            "map": "Map 1 - River Bend",
+            "state": "Build"
+          },
+          "resources": [
+            {
+              "name": "https://homeland.secana.top/styles.css",
+              "startMs": 1604.1,
+              "durationMs": 2157.2,
+              "transferSize": 2894
+            },
+            {
+              "name": "https://homeland.secana.top/src/app.js?v=campaign-pass-4",
+              "startMs": 1604.2,
+              "durationMs": 5857.2,
+              "transferSize": 20977
+            },
+            {
+              "name": "https://homeland.secana.top/src/game-core.js",
+              "startMs": 7463,
+              "durationMs": 5749.8,
+              "transferSize": 9096
+            },
+            {
+              "name": "https://homeland.secana.top/src/config.js",
+              "startMs": 7463.1,
+              "durationMs": 5413.5,
+              "transferSize": 6591
+            }
+          ],
+          "nowMs": 13318.8
+        }
+      ]
+    }
+  },
+  "endedAt": "2026-02-26T11:24:22.525Z"
+}

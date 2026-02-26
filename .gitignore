@@ -5,6 +5,7 @@ __pycache__/
 .cloudflared/*.json
 .playwright-cli/
 node_modules/
+dist/
 test-results/
 playwright-report/
 .data/

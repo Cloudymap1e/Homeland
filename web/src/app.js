@@ -84,6 +84,24 @@ const LOCAL_PROGRESS_KEY = 'homeland_progress_v1';
 const SAVE_DEBOUNCE_MS = 420;
 const PERIODIC_SAVE_MS = 1500;
 const PERSISTENCE_VERSION = 1;
+const REMOTE_PROGRESS_TIMEOUT_MS = 1200;
+const STATIC_LAYER_CACHE_LIMIT = 24;
+const TERRAIN_QUALITY = {
+  low: {
+    speckles: 2600,
+    blades: 700,
+    glowA: 10,
+    glowB: 8,
+    sparkles: 120,
+  },
+  full: {
+    speckles: 12800,
+    blades: 3400,
+    glowA: 46,
+    glowB: 34,
+    sparkles: 480,
+  },
+};
 
 const visualEffects = [];
 let persistenceReady = false;
@@ -91,6 +109,9 @@ let persistTimerId = null;
 let lastPersistedFingerprint = '';
 let nextPeriodicPersistAt = 0;
 let persistQueue = Promise.resolve();
+let hasLocalMutationsSinceBoot = false;
+let fullQualityRenderTask = null;
+const staticLayerCache = new Map();
 
 const terrainLayer = document.createElement('canvas');
 terrainLayer.width = canvas.width;
@@ -111,19 +132,21 @@ function hashNoise(seed) {
   };
 }
 
-function drawGrassTexture(target, seed) {
+function drawGrassTexture(target, seed, quality = TERRAIN_QUALITY.full) {
+  const width = target.canvas.width;
+  const height = target.canvas.height;
   const noise = hashNoise(seed);
-  const g = target.createLinearGradient(0, 0, 0, canvas.height);
+  const g = target.createLinearGradient(0, 0, 0, height);
   g.addColorStop(0, '#5f8f46');
   g.addColorStop(0.42, '#4f7c38');
   g.addColorStop(1, '#3c612b');
   target.fillStyle = g;
-  target.fillRect(0, 0, canvas.width, canvas.height);
+  target.fillRect(0, 0, width, height);
 
-  for (let i = 0; i < 12800; i += 1) {
+  for (let i = 0; i < quality.speckles; i += 1) {
     const n = noise(i + 1);
-    const x = (noise(i + 9) * canvas.width) | 0;
-    const y = (noise(i + 13) * canvas.height) | 0;
+    const x = (noise(i + 9) * width) | 0;
+    const y = (noise(i + 13) * height) | 0;
     const size = 0.8 + noise(i + 71) * 2.4;
     const alpha = 0.04 + noise(i + 41) * 0.17;
 
@@ -131,9 +154,9 @@ function drawGrassTexture(target, seed) {
     target.fillRect(x, y, size, size);
   }
 
-  for (let i = 0; i < 3400; i += 1) {
-    const x = noise(i * 5 + 120) * canvas.width;
-    const y = noise(i * 7 + 171) * canvas.height;
+  for (let i = 0; i < quality.blades; i += 1) {
+    const x = noise(i * 5 + 120) * width;
+    const y = noise(i * 7 + 171) * height;
     const len = 2.2 + noise(i * 11 + 211) * 5.6;
     const angle = (noise(i * 13 + 271) - 0.5) * 1.45;
     const sway = (noise(i * 17 + 307) - 0.5) * 1.8;
@@ -145,9 +168,9 @@ function drawGrassTexture(target, seed) {
     target.stroke();
   }
 
-  for (let i = 0; i < 46; i += 1) {
-    const cx = noise(i * 3 + 21) * canvas.width;
-    const cy = noise(i * 7 + 51) * canvas.height;
+  for (let i = 0; i < quality.glowA; i += 1) {
+    const cx = noise(i * 3 + 21) * width;
+    const cy = noise(i * 7 + 51) * height;
     const rx = 42 + noise(i * 5 + 19) * 126;
     const ry = 24 + noise(i * 11 + 31) * 92;
 
@@ -165,9 +188,9 @@ function drawGrassTexture(target, seed) {
     target.restore();
   }
 
-  for (let i = 0; i < 480; i += 1) {
-    const x = noise(i * 29 + 612) * canvas.width;
-    const y = noise(i * 31 + 641) * canvas.height;
+  for (let i = 0; i < quality.sparkles; i += 1) {
+    const x = noise(i * 29 + 612) * width;
+    const y = noise(i * 31 + 641) * height;
     const size = 0.9 + noise(i * 37 + 673) * 1.7;
     target.fillStyle = i % 5 === 0 ? 'rgba(233,213,143,0.23)' : 'rgba(165,204,122,0.16)';
     target.beginPath();
@@ -175,9 +198,9 @@ function drawGrassTexture(target, seed) {
     target.fill();
   }
 
-  for (let i = 0; i < 34; i += 1) {
-    const cx = noise(i * 3 + 21) * canvas.width;
-    const cy = noise(i * 7 + 51) * canvas.height;
+  for (let i = 0; i < quality.glowB; i += 1) {
+    const cx = noise(i * 3 + 21) * width;
+    const cy = noise(i * 7 + 51) * height;
     const rx = 30 + noise(i * 5 + 19) * 96;
     const ry = 20 + noise(i * 11 + 31) * 80;
 
@@ -342,12 +365,66 @@ function drawRiverLayer(target) {
   target.restore();
 }
 
-function buildStaticMapLayers() {
-  const map = game.mapConfig;
-  const seed = map.seed || 1;
+function staticLayerCacheKey(mapId, width, height, quality) {
+  return `${mapId}|${width}x${height}|${quality}`;
+}
+
+function getStaticLayerFromCache(key) {
+  if (!staticLayerCache.has(key)) {
+    return null;
+  }
+  const cached = staticLayerCache.get(key);
+  staticLayerCache.delete(key);
+  staticLayerCache.set(key, cached);
+  return cached;
+}
+
+function setStaticLayerCache(key, layers) {
+  staticLayerCache.set(key, layers);
+  while (staticLayerCache.size > STATIC_LAYER_CACHE_LIMIT) {
+    const oldestKey = staticLayerCache.keys().next().value;
+    staticLayerCache.delete(oldestKey);
+  }
+}
+
+function copyStaticLayersToDisplay(layers) {
   const terrain = terrainLayer.getContext('2d');
   terrain.clearRect(0, 0, canvas.width, canvas.height);
-  drawGrassTexture(terrain, seed);
+  terrain.drawImage(layers.terrain, 0, 0);
+  const river = riverLayer.getContext('2d');
+  river.clearRect(0, 0, canvas.width, canvas.height);
+  river.drawImage(layers.river, 0, 0);
+}
+
+function cancelFullQualityRenderTask() {
+  if (!fullQualityRenderTask) {
+    return;
+  }
+  if (fullQualityRenderTask.kind === 'idle' && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(fullQualityRenderTask.id);
+  } else if (fullQualityRenderTask.kind === 'timeout') {
+    window.clearTimeout(fullQualityRenderTask.id);
+  }
+  fullQualityRenderTask = null;
+}
+
+function buildStaticMapLayers(options = {}) {
+  const quality = options.quality === 'low' ? 'low' : 'full';
+  const cacheKey = staticLayerCacheKey(game.mapId, canvas.width, canvas.height, quality);
+  const cached = getStaticLayerFromCache(cacheKey);
+  if (cached) {
+    copyStaticLayersToDisplay(cached);
+    return;
+  }
+
+  const map = game.mapConfig;
+  const seed = map.seed || 1;
+  const qualityProfile = quality === 'low' ? TERRAIN_QUALITY.low : TERRAIN_QUALITY.full;
+  const terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = canvas.width;
+  terrainCanvas.height = canvas.height;
+  const terrain = terrainCanvas.getContext('2d');
+  drawGrassTexture(terrain, seed, qualityProfile);
 
   const noise = hashNoise(seed + 33);
   const treeClusters = 5 + map.routes.length;
@@ -375,24 +452,81 @@ function buildStaticMapLayers() {
     );
   }
 
-  const river = riverLayer.getContext('2d');
+  const riverCanvas = document.createElement('canvas');
+  riverCanvas.width = canvas.width;
+  riverCanvas.height = canvas.height;
+  const river = riverCanvas.getContext('2d');
   drawRiverLayer(river);
+
+  const layers = {
+    terrain: terrainCanvas,
+    river: riverCanvas,
+  };
+  setStaticLayerCache(cacheKey, layers);
+  copyStaticLayersToDisplay(layers);
 }
 
-function resizeCanvasToViewport() {
+function scheduleFullQualityLayerBuild() {
+  cancelFullQualityRenderTask();
+  const mapId = game.mapId;
+  const width = canvas.width;
+  const height = canvas.height;
+  const fullKey = staticLayerCacheKey(mapId, width, height, 'full');
+  if (getStaticLayerFromCache(fullKey)) {
+    buildStaticMapLayers({ quality: 'full' });
+    return;
+  }
+  const task = () => {
+    fullQualityRenderTask = null;
+    if (mapId !== game.mapId || width !== canvas.width || height !== canvas.height) {
+      return;
+    }
+    buildStaticMapLayers({ quality: 'full' });
+  };
+  if ('requestIdleCallback' in window) {
+    fullQualityRenderTask = {
+      kind: 'idle',
+      id: window.requestIdleCallback(task, { timeout: 900 }),
+    };
+    return;
+  }
+  fullQualityRenderTask = {
+    kind: 'timeout',
+    id: window.setTimeout(task, 300),
+  };
+}
+
+function renderStaticMapLayersFastThenFull() {
+  const fullKey = staticLayerCacheKey(game.mapId, canvas.width, canvas.height, 'full');
+  if (getStaticLayerFromCache(fullKey)) {
+    buildStaticMapLayers({ quality: 'full' });
+    return;
+  }
+  buildStaticMapLayers({ quality: 'low' });
+  scheduleFullQualityLayerBuild();
+}
+
+function resizeCanvasToViewport(options = {}) {
+  const preferFastStatic = options.preferFastStatic !== false;
   const nextWidth = Math.max(320, Math.floor(window.innerWidth));
   const nextHeight = Math.max(320, Math.floor(window.innerHeight));
   if (canvas.width === nextWidth && canvas.height === nextHeight) {
-    return;
+    return false;
   }
+  cancelFullQualityRenderTask();
   canvas.width = nextWidth;
   canvas.height = nextHeight;
   terrainLayer.width = nextWidth;
   terrainLayer.height = nextHeight;
   riverLayer.width = nextWidth;
   riverLayer.height = nextHeight;
-  buildStaticMapLayers();
+  if (preferFastStatic) {
+    renderStaticMapLayersFastThenFull();
+  } else {
+    buildStaticMapLayers({ quality: 'full' });
+  }
   refreshSlotPopout();
+  return true;
 }
 
 function updatePanelButtons() {
@@ -563,6 +697,10 @@ function stateLabel(stateId) {
   return STATE_LABELS[stateId] || stateId;
 }
 
+function markLocalMutation() {
+  hasLocalMutationsSinceBoot = true;
+}
+
 function readLocalProgress() {
   try {
     const raw = localStorage.getItem(LOCAL_PROGRESS_KEY);
@@ -609,12 +747,19 @@ function createProgressFingerprint(payload) {
   return JSON.stringify(stable);
 }
 
-async function fetchServerProgress() {
+async function fetchServerProgress(options = {}) {
+  const timeoutMs = Number(options.timeoutMs) || 0;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  let timeoutId = null;
+  if (controller) {
+    timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  }
   try {
     const response = await fetch(PROGRESS_ENDPOINT, {
       method: 'GET',
       cache: 'no-store',
       credentials: 'same-origin',
+      signal: controller?.signal,
     });
     if (!response.ok) {
       return null;
@@ -626,6 +771,10 @@ async function fetchServerProgress() {
     return body.progress && typeof body.progress === 'object' ? body.progress : null;
   } catch {
     return null;
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -678,38 +827,38 @@ function applyPersistedProgress(payload) {
   markCurveDirty();
   setPanelVisibility('report', reportPanelVisible);
   setPanelVisibility('curve', curvePanelVisible);
-  buildStaticMapLayers();
+  renderStaticMapLayersFastThenFull();
   updateMapMeta();
   updateHud();
   return true;
 }
 
-function pickNewestProgress(remote, local) {
-  const remoteTs = Number(remote?.updatedAt) || 0;
-  const localTs = Number(local?.updatedAt) || 0;
-  if (!remote && !local) {
-    return null;
+async function hydrateProgressOptimized() {
+  const local = readLocalProgress();
+  let appliedPayload = null;
+  if (local && applyPersistedProgress(local)) {
+    appliedPayload = local;
+    lastPersistedFingerprint = createProgressFingerprint(local);
   }
-  if (!remote) {
-    return local;
-  }
-  if (!local) {
-    return remote;
-  }
-  return remoteTs >= localTs ? remote : local;
-}
 
-async function hydrateProgress() {
-  const [remote, local] = await Promise.all([fetchServerProgress(), Promise.resolve(readLocalProgress())]);
-  const payload = pickNewestProgress(remote, local);
-  if (!payload) {
+  const remote = await fetchServerProgress({ timeoutMs: REMOTE_PROGRESS_TIMEOUT_MS });
+  if (!remote) {
     return;
   }
-  if (!applyPersistedProgress(payload)) {
+
+  if (hasLocalMutationsSinceBoot) {
     return;
   }
-  const fingerprint = createProgressFingerprint(payload);
-  lastPersistedFingerprint = fingerprint;
+
+  const remoteTs = Number(remote.updatedAt) || 0;
+  const appliedTs = Number(appliedPayload?.updatedAt) || 0;
+  if (appliedPayload && remoteTs <= appliedTs) {
+    return;
+  }
+
+  if (applyPersistedProgress(remote)) {
+    lastPersistedFingerprint = createProgressFingerprint(remote);
+  }
 }
 
 async function persistProgressNow(keepalive = false) {
@@ -1088,6 +1237,9 @@ function renderSlotPopout(slotId = selectedSlotId) {
           'Pay once for this map run, then tower builds use tower-only costs.',
           () => {
             const result = game.activateSlot(slot.id);
+            if (result.ok) {
+              markLocalMutation();
+            }
             slotPopoutNotice = result.ok ? '' : result.error;
             updateHud();
             scheduleProgressPersist();
@@ -1104,6 +1256,9 @@ function renderSlotPopout(slotId = selectedSlotId) {
           `L1 DMG ${cfg.levels[0].damage} | RNG ${cfg.levels[0].range}`,
           () => {
             const result = game.buildTower(slot.id, cfg.id);
+            if (result.ok) {
+              markLocalMutation();
+            }
             slotPopoutNotice = result.ok ? '' : result.error;
             rangePreviewTowerId = null;
             if (result.ok) {
@@ -1154,6 +1309,9 @@ function renderSlotPopout(slotId = selectedSlotId) {
         canUpgrade ? 'Upgrade anytime except map-result state.' : 'This tower is already at level cap.',
         () => {
           const result = game.upgradeTower(slot.id);
+          if (result.ok) {
+            markLocalMutation();
+          }
           slotPopoutNotice = result.ok ? '' : result.error;
           updateHud();
           scheduleProgressPersist();
@@ -1167,6 +1325,9 @@ function renderSlotPopout(slotId = selectedSlotId) {
         'Refund 70% of total tower build and upgrade costs.',
         () => {
           const result = game.sellTower(slot.id);
+          if (result.ok) {
+            markLocalMutation();
+          }
           slotPopoutNotice = result.ok ? '' : result.error;
           updateHud();
           scheduleProgressPersist();
@@ -2042,11 +2203,12 @@ function loadSelectedMap() {
     elMapSelect.value = game.mapId;
     return;
   }
+  markLocalMutation();
   selectedSlotId = null;
   fastForwardUntilMs = 0;
   slotPopoutNotice = '';
   closeSlotPopout();
-  buildStaticMapLayers();
+  renderStaticMapLayersFastThenFull();
   updateMapMeta();
   updateHud();
   scheduleProgressPersist();
@@ -2054,7 +2216,10 @@ function loadSelectedMap() {
 
 function triggerFastForwardWave() {
   if (['build_phase', 'wave_result'].includes(game.state)) {
-    game.startNextWave();
+    const startRes = game.startNextWave();
+    if (startRes.ok) {
+      markLocalMutation();
+    }
   }
   if (game.state !== 'wave_running') {
     fastForwardUntilMs = 0;
@@ -2075,13 +2240,14 @@ function maybeAutoAdvanceMap() {
   if (!mapRes.ok) {
     return;
   }
+  markLocalMutation();
   selectedSlotId = null;
   slotPopoutNotice = '';
   closeSlotPopout();
   visualEffects.length = 0;
   fastForwardUntilMs = 0;
   elMapSelect.value = game.mapId;
-  buildStaticMapLayers();
+  renderStaticMapLayersFastThenFull();
   updateMapMeta();
   scheduleProgressPersist();
 }
@@ -2096,7 +2262,10 @@ function handleAutoContinue() {
     return;
   }
   if (['build_phase', 'wave_result'].includes(game.state)) {
-    game.startNextWave();
+    const startRes = game.startNextWave();
+    if (startRes.ok) {
+      markLocalMutation();
+    }
   }
 }
 
@@ -2128,24 +2297,30 @@ document.addEventListener('pointerdown', (event) => {
 });
 
 btnStartWave.addEventListener('click', () => {
-  game.startNextWave();
+  const startRes = game.startNextWave();
+  if (startRes.ok) {
+    markLocalMutation();
+  }
   updateHud();
   scheduleProgressPersist();
 });
 
 btnToggleSpeed.addEventListener('click', () => {
+  markLocalMutation();
   game.setSpeed(game.speed === 1 ? 2 : 1);
   updateHud();
   scheduleProgressPersist();
 });
 
 btnFastForwardWave.addEventListener('click', () => {
+  markLocalMutation();
   triggerFastForwardWave();
   updateHud();
   scheduleProgressPersist();
 });
 
 btnToggleAutoContinue.addEventListener('click', () => {
+  markLocalMutation();
   autoContinueEnabled = !autoContinueEnabled;
   handleAutoContinue();
   updateHud();
@@ -2153,29 +2328,34 @@ btnToggleAutoContinue.addEventListener('click', () => {
 });
 
 btnToggleReportPanel.addEventListener('click', () => {
+  markLocalMutation();
   setPanelVisibility('report', !reportPanelVisible);
   scheduleProgressPersist();
 });
 
 btnToggleCurvePanel.addEventListener('click', () => {
+  markLocalMutation();
   setPanelVisibility('curve', !curvePanelVisible);
   scheduleProgressPersist();
 });
 
 btnHideReportPanel.addEventListener('click', (event) => {
   event.stopPropagation();
+  markLocalMutation();
   setPanelVisibility('report', false);
   scheduleProgressPersist();
 });
 
 btnHideCurvePanel.addEventListener('click', (event) => {
   event.stopPropagation();
+  markLocalMutation();
   setPanelVisibility('curve', false);
   scheduleProgressPersist();
 });
 
 elMapSelect.addEventListener('change', loadSelectedMap);
 elCurveTower.addEventListener('change', () => {
+  markLocalMutation();
   selectedCurveTowerId = elCurveTower.value;
   markCurveDirty();
   updateCurveVisualization(true);
@@ -2201,7 +2381,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 window.addEventListener('resize', () => {
-  resizeCanvasToViewport();
+  resizeCanvasToViewport({ preferFastStatic: true });
   clampHudWindowsToViewport();
 });
 
@@ -2218,20 +2398,19 @@ async function bootstrap() {
   makeWindowDraggable(elResultWindow, elResultHandle);
   makeWindowDraggable(elCurveWindow, elCurveHandle);
   updatePanelButtons();
-  updateMapMeta();
-  updateHud();
-
-  await hydrateProgress();
-
-  resizeCanvasToViewport();
+  resizeCanvasToViewport({ preferFastStatic: true });
   clampHudWindowsToViewport();
   updateMapMeta();
   updateHud();
-
-  persistenceReady = true;
-  nextPeriodicPersistAt = performance.now() + PERIODIC_SAVE_MS;
-  queueProgressPersist(false);
   requestAnimationFrame(gameLoop);
+
+  hydrateProgressOptimized()
+    .catch(() => {})
+    .finally(() => {
+      persistenceReady = true;
+      nextPeriodicPersistAt = performance.now() + PERIODIC_SAVE_MS;
+      queueProgressPersist(false);
+    });
 }
 
 bootstrap();
