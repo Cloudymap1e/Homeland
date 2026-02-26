@@ -23,14 +23,18 @@ test('slot popout tower button responds to real click', async ({ page }) => {
 
   const activateButton = page.locator('#slot-popout .slot-option').first();
   await expect(activateButton).toContainText('Activate Slot');
+  const activateLabel = await activateButton.innerText();
+  const activateCost = Number((activateLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
   await activateButton.click();
 
   const coinTextAfterActivate = await page.locator('#coins-overlay').innerText();
   const coinsAfterActivate = Number(coinTextAfterActivate.replaceAll(',', ''));
-  expect(coinsBefore - coinsAfterActivate).toBe(45);
+  expect(coinsBefore - coinsAfterActivate).toBe(activateCost);
 
   const firstTowerButton = page.locator('#slot-popout .slot-option').first();
   await expect(firstTowerButton).toBeVisible();
+  const buildLabel = await firstTowerButton.innerText();
+  const buildCost = Number((buildLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
   await firstTowerButton.click();
 
   await expect(page.locator('#slot-popout h3')).toHaveText(/Tower Slot/);
@@ -39,8 +43,8 @@ test('slot popout tower button responds to real click', async ({ page }) => {
   const coinsAfter = Number(coinTextAfter.replaceAll(',', ''));
 
   expect(coinsAfter).toBeLessThan(coinsBefore);
-  expect(coinsAfterActivate - coinsAfter).toBe(460);
-  expect(coinsBefore - coinsAfter).toBe(505);
+  expect(coinsAfterActivate - coinsAfter).toBe(buildCost);
+  expect(coinsBefore - coinsAfter).toBe(activateCost + buildCost);
 });
 
 test('can build and upgrade from slot popout during active wave', async ({ page }) => {
@@ -65,14 +69,18 @@ test('can build and upgrade from slot popout during active wave', async ({ page 
 
   const activateButton = page.locator('#slot-popout .slot-option').first();
   await expect(activateButton).toContainText('Activate Slot');
+  const activateLabel = await activateButton.innerText();
+  const activateCost = Number((activateLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
   await activateButton.click();
 
   const coinTextAfterActivate = await page.locator('#coins-overlay').innerText();
   const coinsAfterActivate = Number(coinTextAfterActivate.replaceAll(',', ''));
-  expect(coinsAfterActivate).toBeLessThan(coinsBefore);
+  expect(coinsBefore - coinsAfterActivate).toBe(activateCost);
 
   const buildButton = page.locator('#slot-popout .slot-option').first();
   await expect(buildButton).toBeEnabled();
+  const buildLabel = await buildButton.innerText();
+  const buildCost = Number((buildLabel.match(/-\s*([\d,]+)c/i)?.[1] || '0').replaceAll(',', ''));
   await buildButton.click();
 
   await expect(page.locator('#slot-popout h3')).toHaveText(/Tower Slot/);
@@ -80,7 +88,7 @@ test('can build and upgrade from slot popout during active wave', async ({ page 
 
   const coinTextAfterBuild = await page.locator('#coins-overlay').innerText();
   const coinsAfterBuild = Number(coinTextAfterBuild.replaceAll(',', ''));
-  expect(coinsAfterBuild).toBeLessThan(coinsBefore);
+  expect(coinsAfterActivate - coinsAfterBuild).toBe(buildCost);
 
   const upgradeButton = page.locator('#slot-popout .slot-option').first();
   await expect(upgradeButton).toBeEnabled();
@@ -90,4 +98,59 @@ test('can build and upgrade from slot popout during active wave', async ({ page 
   const coinTextAfterUpgrade = await page.locator('#coins-overlay').innerText();
   const coinsAfterUpgrade = Number(coinTextAfterUpgrade.replaceAll(',', ''));
   expect(coinsAfterUpgrade).toBeLessThan(coinsAfterBuild);
+});
+
+test('failed wave keeps campaign run resumable without reset wipe', async ({ page }) => {
+  const seededProgress = {
+    updatedAt: Date.now(),
+    autoContinueEnabled: false,
+    selectedTowerId: 'arrow',
+    selectedCurveTowerId: 'arrow',
+    reportPanelVisible: true,
+    curvePanelVisible: true,
+    game: {
+      version: 1,
+      mapId: 'map_03_marsh_maze',
+      unlockedMapIds: ['map_01_river_bend', 'map_02_split_delta', 'map_03_marsh_maze'],
+      completedMapIds: ['map_01_river_bend', 'map_02_split_delta'],
+      paidSlotIds: [],
+      state: 'build_phase',
+      coins: 120,
+      xp: 5000,
+      waveIndex: -1,
+      speed: 1,
+      spawnCooldown: 0,
+      spawnQueue: [],
+      currentWaveLeaks: 0,
+      enemies: [],
+      nextEnemyId: 1,
+      towers: [],
+      fireZones: [],
+      result: null,
+      stats: { spawned: 0, killed: 0, leaked: 0 },
+    },
+  };
+
+  await page.request.put(`${BASE_URL}/api/progress`, { data: seededProgress });
+  await page.goto(BASE_URL);
+
+  await expect(page.locator('#map-overlay')).toContainText('Map 3');
+  await page.locator('#start-wave').click();
+
+  for (let i = 0; i < 40; i += 1) {
+    const state = await page.locator('#state-overlay').innerText();
+    if (state !== 'Wave Live') {
+      break;
+    }
+    await page.locator('#fast-forward-wave').click();
+    await page.waitForTimeout(80);
+  }
+
+  await expect(page.locator('#coins-overlay')).toHaveText('0');
+  await expect(page.locator('#state-overlay')).toHaveText('Build');
+  await expect(page.locator('#wave-overlay')).toHaveText('1/20');
+
+  await page.locator('#start-wave').click();
+  await expect(page.locator('#wave-overlay')).toHaveText('2/20');
+  await expect(page.locator('#state-overlay')).toHaveText('Wave Live');
 });
