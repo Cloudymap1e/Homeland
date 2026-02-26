@@ -1221,7 +1221,12 @@ function updateHud() {
         : ' Campaign sequence complete.';
       elResult.innerHTML = `Victory on ${snap.mapName}.${rewardText}${unlockText}`;
     } else {
-      elResult.textContent = `Defeat on ${snap.mapName}. Treasury exhausted.`;
+      const leakCount = Number(snap.result.leaked || snap.leaked || 0);
+      if (snap.result.reason === 'leaks') {
+        elResult.textContent = `Defeat on ${snap.mapName}. ${formatNumber(leakCount)} boats escaped the river routes.`;
+      } else {
+        elResult.textContent = `Defeat on ${snap.mapName}. Treasury exhausted.`;
+      }
     }
   } else {
     elResult.textContent = 'Fleet in progress. Reinforce river chokepoints and upgrade efficiently.';

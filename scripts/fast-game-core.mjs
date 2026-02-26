@@ -203,6 +203,7 @@ export class FastHomelandGame {
     this.result = null;
     this.coins = 0;
     this.xp = 0;
+    this.currentWaveLeaks = 0;
     this.stats = { spawned: 0, killed: 0, leaked: 0 };
 
     this.lastAttacks = [];
@@ -290,6 +291,7 @@ export class FastHomelandGame {
     this.spawnCooldown = 0;
     this.spawnQueueLen = 0;
     this.spawnCursor = 0;
+    this.currentWaveLeaks = 0;
 
     this.enemyCount = 0;
     this.fireCount = 0;
@@ -558,11 +560,13 @@ export class FastHomelandGame {
       const payload = this.buildGpuWavePayload(wave);
       const result = this.gpuWaveSim(payload);
 
-      this.coins = Number(result.coins) || 0;
+      this.coins = Math.max(0, Number(result.coins) || 0);
       this.xp = Math.max(0, Number(result.xp) || 0);
       this.stats.spawned += payload.enemyQueue.length;
       this.stats.killed += Math.max(0, Math.round(Number(result.killed) || 0));
-      this.stats.leaked += Math.max(0, Math.round(Number(result.leaked) || 0));
+      const leaked = Math.max(0, Math.round(Number(result.leaked) || 0));
+      this.stats.leaked += leaked;
+      this.currentWaveLeaks += leaked;
 
       if (Array.isArray(result.towerCooldowns)) {
         for (const item of result.towerCooldowns) {
@@ -580,14 +584,8 @@ export class FastHomelandGame {
       this.spawnCursor = this.spawnQueueLen;
       this.lastAttacks = [];
 
-      if (result.defeat || this.coins < 0) {
-        this.state = 'map_result';
-        this.result = {
-          victory: false,
-          mapId: this.mapConfig.mapId,
-          nextMapUnlocked: false,
-        };
-        return { ok: true };
+      if (result.defeat && leaked === 0) {
+        return { ok: false, error: 'GPU wave simulation failed.' };
       }
 
       this.state = 'wave_running';
@@ -630,6 +628,7 @@ export class FastHomelandGame {
     this.spawnQueueLen = cursor;
     this.spawnCursor = 0;
     this.spawnCooldown = 0;
+    this.currentWaveLeaks = 0;
     this.state = 'wave_running';
 
     if (this.gpuWaveSim) {
@@ -1099,22 +1098,14 @@ export class FastHomelandGame {
       const slowMultiplier = 1 - Math.min(this.enemySlowPercent[i] / 100, 0.84);
       this.enemyDistance[i] += this.enemySpeed[i] * slowMultiplier * dt;
       if (this.enemyDistance[i] >= this.enemyRouteLength[i]) {
-        this.coins -= this.mapConfig.leakPenalty.coins;
+        this.coins = Math.max(0, this.coins - this.mapConfig.leakPenalty.coins);
         this.xp = Math.max(0, this.xp - this.mapConfig.leakPenalty.xp);
+        this.currentWaveLeaks += 1;
         this.stats.leaked += 1;
         this.removeEnemyAt(i);
       } else {
         i += 1;
       }
-    }
-
-    if (this.coins < 0) {
-      this.state = 'map_result';
-      this.result = {
-        victory: false,
-        mapId: this.mapConfig.mapId,
-        nextMapUnlocked: false,
-      };
     }
   }
 
@@ -1128,10 +1119,27 @@ export class FastHomelandGame {
       return;
     }
 
-    this.xp += PROGRESSION.xpPerWaveClear + (this.mapConfig.xpWaveBonus || 0);
-    this.state = 'wave_result';
+    const hadLeaksThisWave = this.currentWaveLeaks > 0;
+    this.currentWaveLeaks = 0;
+    if (!hadLeaksThisWave) {
+      this.xp += PROGRESSION.xpPerWaveClear + (this.mapConfig.xpWaveBonus || 0);
+      this.state = 'wave_result';
+    } else {
+      this.state = 'build_phase';
+    }
 
     if (this.waveIndex === this.waves.length - 1) {
+      if (this.stats.leaked > 0) {
+        this.state = 'map_result';
+        this.result = {
+          victory: false,
+          mapId: this.mapConfig.mapId,
+          nextMapUnlocked: false,
+          reason: 'leaks',
+          leaked: this.stats.leaked,
+        };
+        return;
+      }
       const reward = this.mapConfig.mapClearReward || {};
       const rewardCoins = Math.max(0, Math.round(Number(reward.coins) || 0));
       const rewardXp = Math.max(0, Math.round(Number(reward.xp) || 0));
@@ -1156,6 +1164,7 @@ export class FastHomelandGame {
       state: this.state,
       waveIndex: this.waveIndex,
       leaked: this.stats.leaked,
+      currentWaveLeaks: this.currentWaveLeaks,
       result: this.result,
       stats: { ...this.stats },
       boatsLeft: (this.spawnQueueLen - this.spawnCursor) + this.enemyCount,

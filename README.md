@@ -50,9 +50,12 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 
 - Win wave: all boats in the fleet are neutralized.
 - Leak event: any boat reaching river exit triggers penalties.
+- Wave fail handling: leaked waves still continue to next build phase (no mid-map hard stop).
+- Map pass rule: all waves complete **and** total leaks remain `0`; leaked runs end as map defeat at final wave.
 - Penalties:
   - coin deduction
   - XP deduction
+  - both values floor at `0` (no negative balances)
 - Progression unlock: next map requires minimum XP threshold.
 
 ## Economy and Progression

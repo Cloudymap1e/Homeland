@@ -195,6 +195,7 @@ export class HomelandGame {
     this.lastAttacks = [];
     this.result = null;
     this.events = [];
+    this.currentWaveLeaks = 0;
     this.stats = {
       spawned: 0,
       killed: 0,
@@ -354,6 +355,7 @@ export class HomelandGame {
       speed: this.speed,
       spawnCooldown: this.spawnCooldown,
       spawnQueue: [...this.spawnQueue],
+      currentWaveLeaks: this.currentWaveLeaks,
       enemies: this.enemies.map((enemy) => ({ ...enemy })),
       nextEnemyId: this.nextEnemyId,
       towers: Array.from(this.towers.values()).map((tower) => ({ ...tower })),
@@ -396,6 +398,10 @@ export class HomelandGame {
     this.waveIndex = clampNumber(payload.waveIndex, this.waveIndex, -1, this.waves.length - 1);
     this.speed = clampNumber(payload.speed, this.speed, 0.25, 4);
     this.spawnCooldown = clampNumber(payload.spawnCooldown, this.spawnCooldown, 0);
+    this.currentWaveLeaks = Math.max(
+      0,
+      Math.floor(clampNumber(payload.currentWaveLeaks, this.currentWaveLeaks, 0))
+    );
     this.nextEnemyId = Math.max(1, Math.floor(clampNumber(payload.nextEnemyId, this.nextEnemyId, 1)));
 
     if (Array.isArray(payload.spawnQueue)) {
@@ -590,6 +596,7 @@ export class HomelandGame {
       Array(count).fill(enemyType)
     );
     this.spawnCooldown = 0;
+    this.currentWaveLeaks = 0;
     this.state = 'wave_running';
     return { ok: true };
   }
@@ -890,23 +897,15 @@ export class HomelandGame {
       enemy.distance += enemy.speed * slowMultiplier * dt;
 
       if (enemy.distance >= enemy.routeLength) {
-        this.coins -= this.mapConfig.leakPenalty.coins;
+        this.coins = Math.max(0, this.coins - this.mapConfig.leakPenalty.coins);
         this.xp = Math.max(0, this.xp - this.mapConfig.leakPenalty.xp);
+        this.currentWaveLeaks += 1;
         this.stats.leaked += 1;
       } else {
         survivors.push(enemy);
       }
     }
     this.enemies = survivors;
-
-    if (this.coins < 0) {
-      this.state = 'map_result';
-      this.result = {
-        victory: false,
-        mapId: this.mapConfig.mapId,
-        nextMapUnlocked: false,
-      };
-    }
   }
 
   resolveWaveState() {
@@ -918,10 +917,27 @@ export class HomelandGame {
       return;
     }
 
-    this.xp += PROGRESSION.xpPerWaveClear + (this.mapConfig.xpWaveBonus || 0);
-    this.state = 'wave_result';
+    const hadLeaksThisWave = this.currentWaveLeaks > 0;
+    this.currentWaveLeaks = 0;
+    if (!hadLeaksThisWave) {
+      this.xp += PROGRESSION.xpPerWaveClear + (this.mapConfig.xpWaveBonus || 0);
+      this.state = 'wave_result';
+    } else {
+      this.state = 'build_phase';
+    }
 
     if (this.waveIndex === this.waves.length - 1) {
+      if (this.stats.leaked > 0) {
+        this.state = 'map_result';
+        this.result = {
+          victory: false,
+          mapId: this.mapConfig.mapId,
+          nextMapUnlocked: false,
+          reason: 'leaks',
+          leaked: this.stats.leaked,
+        };
+        return;
+      }
       const reward = this.mapConfig.mapClearReward || {};
       const rewardCoins = Math.max(0, Math.round(Number(reward.coins) || 0));
       const rewardXp = Math.max(0, Math.round(Number(reward.xp) || 0));
