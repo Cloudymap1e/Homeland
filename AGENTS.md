@@ -109,6 +109,70 @@ Use a data-driven architecture so balancing and content expansion are easy.
 - Test command: `npm test`.
 - Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
 
+## Current Codebase Map (Authoritative)
+
+- `web/`
+  - `web/index.html`, `web/styles.css`: UI shell and styles.
+  - `web/src/app.js`: canvas rendering loop, UI state, input handling, persistence orchestration, fast-forward, auto-continue, tower curves panel, overlays.
+  - `web/src/game-core.js`: gameplay simulation (economy, placement, combat, waves, progression).
+  - `web/src/config.js`: all balance data + maps + waves + towers (authoritative configs).
+  - `web/tests/*.test.mjs`: Node test runner for game-core invariants.
+  - `web/tests/slot-popout.e2e.spec.mjs`: Playwright UI smoke test.
+- `functions/api/progress.js`: Cloudflare Pages Function for `/api/progress` (D1-backed persistence).
+- `schema/progress.sql`: D1 schema for player progress.
+- `scripts/`
+  - `dev-server.mjs`: local dev server + `.data/player-progress.json` persistence.
+  - `build-web.mjs`, `preview-web.mjs`: production build + preview.
+  - `balance-sim.mjs`, `fast-game-core.mjs`: Monte Carlo balance harness.
+  - `gpu-wave-runner.mjs`, `cuda/wave_sim.cu`, `build-gpu-wave-sim.sh`: GPU wave sim path.
+  - `migrate-progress-to-d1.mjs`: progress migration from `.data` JSON to D1.
+- `src/homeland/`: legacy Python prototype (reference-only).
+- `tests/`: pytest coverage for legacy Python runtime.
+- `docs/`: design docs, balancing guidance, perf baselines.
+
+## Runtime Architecture (Web)
+
+- Entry point: `web/index.html` loads `web/src/app.js`.
+- UI and render loop live in `app.js`, which owns:
+  - Canvas draw + overlays + panels.
+  - Input events and tower placement UX.
+  - Fast-forward wave compression + auto-continue.
+  - Progress persistence scheduling + retry logic.
+- Core simulation is `HomelandGame` in `web/src/game-core.js`:
+  - `build_phase`, `wave_running`, `wave_result`, `map_result` states.
+  - Placement, economy, combat, wave spawning, progression.
+  - Map routing is normalized 0..1 coordinates scaled at render time.
+  - Build slots are filtered by `slotRiverClearancePx`; blocked slots remain visible but not placeable.
+- All balancing + content data lives in `web/src/config.js`:
+  - Map configs (`MAPS`) with routes, slots, wave plans, clear rewards, leak penalties, unlock rules.
+  - Tower configs (`TOWER_CONFIG`) and level curves.
+  - Enemy configs (`ENEMIES`) and progression constants.
+  - Tower ids are: `arrow`, `bone` (Bomb Tower), `magic_fire`, `magic_wind`, `magic_lightning`.
+
+## Persistence + API Flow
+
+- Local dev (`npm run dev`) uses `scripts/dev-server.mjs`:
+  - Serves `web/` assets and handles `/api/progress`.
+  - Stores sessions in `.data/player-progress.json`.
+  - Session identity via `homeland_sid` cookie, with IP fallback.
+- Production (Cloudflare Pages) uses:
+  - `functions/api/progress.js` for `/api/progress`.
+  - D1 database defined by `schema/progress.sql`, binding `PROGRESS_DB`.
+  - `web/src/app.js` reads/writes `/api/progress`, with `localStorage` fallback on errors.
+
+## Testing
+
+- Web runtime tests: `npm test` (Node `--test` over `web/tests/*.test.mjs`).
+- UI smoke test: `npm run test:e2e` (Playwright).
+- Legacy Python tests: `pytest` (from repo root); reference-only unless touching `src/homeland`.
+
+## Build + Deploy (Primary)
+
+- Build: `npm run build:web` (outputs `dist/`).
+- Preview: `npm run preview:web`.
+- Cloudflare Pages deploy: `npm run pages:deploy` (see `wrangler.toml`).
+- D1 migration: `npm run migrate:d1 -- --db=homeland-progress --apply --verify --truncate`.
+
 ## Monte Carlo Balancing (GS75 CUDA-First Rule)
 
 - When running any Monte Carlo balancing simulation on machine `GS75`, CUDA must be prioritized first.
@@ -208,3 +272,10 @@ This script:
 - Setup script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-setup.sh`
 - Run script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-run.sh`
 - Template config: `/Users/rc/Project/Homeland/.cloudflared/config.yml.example`
+
+## Operational Guardrails (Must Follow)
+
+- Do not auto-generate or densify build slots; slots are authored coordinates in `web/src/config.js`.
+- Prefer balance changes in config data (not gameplay code) unless mechanics are broken.
+- Keep tower ids stable (`bone` is the Bomb Tower id).
+- When updating persistence, keep `/api/progress` schema compatible (client expects `{ ok, sessionId, progress }`).
