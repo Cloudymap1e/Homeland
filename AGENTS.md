@@ -1,210 +1,226 @@
 # AGENTS.md
 
-This file defines how agents and contributors should execute work for this project.
+This file is the execution contract for agents and contributors working in this repository.
 
-## Project Summary
+## Mission Snapshot
 
-- Game type: Tower defense strategy.
-- Theme: Defend river routes from pirate fleets.
-- Core loop: Place towers near river paths, upgrade towers, stop fleets before they exit the map.
-- Current scope: Build a clean MVP foundation for early maps (no enemy attack behavior yet).
+- Game type: browser-based tower defense strategy.
+- Theme: defend river routes from pirate fleets (boats).
+- Primary runtime: JavaScript web prototype in `web/`.
+- Legacy runtime: Python prototype in `src/homeland/` (reference-only, not default path).
+- Current campaign scope: `map_01` through `map_05` are playable and configurable.
 
-## Product Rules (MVP)
+## Ground Truth: What Is Production-Relevant Today
 
-- Player starts on Map 1.
-- Every map includes a river path that enemies follow.
-- Towers can only be placed on valid build slots near the river.
-- Initial player balance: `10,000` coins.
-- Enemy waves are pirate fleets (boats), typically `10-20` boats per fleet.
-- Boats differ by speed and HP.
-- First maps: boats do not attack towers.
-- Failure condition component: if a boat exits the river end, player is penalized.
-- Penalties include coin deduction and XP deduction.
-- Progression: player needs enough XP to unlock the next map.
-- Difficulty scaling: later maps/waves increase enemy strength.
+1. Core gameplay implementation is in:
+- `web/src/config.js` (all game/balance content and map/tower/enemy/progression data)
+- `web/src/game-core.js` (canonical playable simulation engine)
+- `web/src/app.js` (UI, rendering, controls, persistence orchestration)
 
-## Tower Set (Initial)
+2. Monte Carlo/balancing engines are in:
+- `scripts/balance-sim.mjs` (main simulator, policy suites, pass-standard/diversity/OAT)
+- `scripts/fast-game-core.mjs` (data-oriented fast simulation engine)
+- `scripts/gpu-wave-runner.mjs` + `scripts/cuda/wave_sim.cu` (GPU wave backend)
 
-- Arrow Tower: consistent single-target physical damage.
-- Bomb Tower: high direct damage with splash damage in area.
-- Magic Tower (element variants):
-  - Fire: fireball impact with 3-second persistent burn zone.
-  - Wind: fleet slow-control with multi-target effect by level.
-  - Lightning: chain or burst magic damage.
+3. Progress persistence backends:
+- Local dev server mode: `scripts/dev-server.mjs` stores progress in `.data/player-progress.json`
+- Cloudflare Pages mode: `functions/api/progress.js` stores progress in D1 (`PROGRESS_DB`)
+- Schema/migration:
+  - `schema/progress.sql`
+  - `scripts/migrate-progress-to-d1.mjs`
 
-Keep balancing data in config files, not hardcoded in gameplay systems.
+4. Build/deploy toolchain:
+- Build output: `dist/` via `scripts/build-web.mjs`
+- Preview: `scripts/preview-web.mjs`
+- Cloudflare config: `wrangler.toml`
+- Tunnel publish scripts:
+  - `scripts/cloudflare-tunnel-setup.sh`
+  - `scripts/cloudflare-tunnel-run.sh`
 
-## Architecture Direction
+## Product Rules (Current MVP+)
 
-Use a data-driven architecture so balancing and content expansion are easy.
+- Player starts on `Map 1`.
+- Boats follow authored river routes.
+- Towers can be placed only on valid build slots and only after slot activation payment.
+- Starting coins are map-defined (Map 1 starts at `10,000`).
+- Waves are fleet compositions defined by map config.
+- Boats do not attack towers in current scope.
+- Leak behavior:
+  - leak applies coin + XP penalties,
+  - XP floors at `0`,
+  - coins may go negative (run can continue).
+- Map progression:
+  - map unlock remains sequential,
+  - unlock requires previous-map completion + required XP.
+- Map pass/fail:
+  - leaked non-final waves continue the run,
+  - final wave with leaks ends map as defeat (`reason: leaks`).
 
-- `MapConfig`: river path, build slots, wave plans, unlock requirement.
-- `TowerConfig`: cost, range, attack speed, damage, upgrade tree.
-- `EnemyConfig`: HP, speed, reward, special abilities (future).
-- `WaveConfig`: composition of enemy boats, spawn intervals.
-- `ProgressionConfig`: XP thresholds and map unlock rules.
+## Tower Set and Roles
 
-## Suggested Core Modules
+- `arrow`: stable single-target DPS.
+- `bone` (bomb tower): heavy direct hit with splash falloff.
+- `magic_fire`: hit damage + burn + persistent fire zone.
+- `magic_wind`: multi-target slow control.
+- `magic_lightning`: chain damage with falloff.
 
-- `GameStateManager`: game phases, pause/resume, win/lose state.
-- `EconomySystem`: coins, spending, rewards, penalties.
-- `PlacementSystem`: tower placement validation and grid/slot occupancy.
-- `CombatSystem`: targeting, projectile/effect processing, damage resolution.
-- `WaveSystem`: spawns fleets and tracks wave completion.
-- `ProgressionSystem`: XP gain/loss and map unlock evaluation.
-- `UI/HUD`: coins, XP, wave status, build/upgrade controls.
+Balance values must remain config-driven in `web/src/config.js`; do not hardcode balance constants into gameplay flow unless they are generic engine constants.
+
+## Data and Architecture Rules
+
+- Data-driven first:
+  - map routes, slots, waves, unlocks, leak penalties, rewards, enemy scaling, pass criteria, and tower curves must remain in config data.
+- Build slot coordinates are authored map design data:
+  - never auto-generate, densify, offset, or normalize slot positions away from authored coordinates.
+- `game-core` owns gameplay state transitions and simulation truth.
+- `app.js` owns rendering, HUD, controls, and persistence scheduling only.
+- `balance-sim` may use `FastHomelandGame`/GPU for speed, but game rules must stay behaviorally consistent with playable logic.
+
+## Runtime and Commands
+
+Run from repository root.
+
+- Dev server (with local JSON progress API):
+  - `npm run dev`
+  - serves on `http://127.0.0.1:4173`
+- Unit tests:
+  - `npm test`
+- E2E tests:
+  - `npm run test:e2e`
+  - optional base URL override: `HOMELAND_E2E_BASE_URL=http://127.0.0.1:4173`
+- Build static assets:
+  - `npm run build:web`
+- Preview dist:
+  - `npm run preview:web`
+- Cloudflare Pages local emulation:
+  - `npm run pages:dev`
+- Cloudflare Pages deploy:
+  - `npm run pages:deploy`
+
+## Persistence Model (Do Not Break)
+
+Client behavior in `web/src/app.js`:
+
+- Dual persistence:
+  - local fallback via `localStorage` (`homeland_progress_v1`)
+  - remote `/api/progress` sync
+- Boot strategy:
+  - apply local snapshot immediately if valid,
+  - perform fast remote fetch with timeout (`REMOTE_PROGRESS_TIMEOUT_MS`),
+  - perform slow-path retry without timeout to reconcile stale local state.
+- Write strategy:
+  - debounced saves + periodic saves + unload flush (`sendBeacon` fallback POST).
+- Safety rule:
+  - remote stale data must not overwrite newer local-mutated state during boot.
+
+Any persistence changes must preserve these guarantees and include test/verification notes.
+
+## Balancing and Monte Carlo Rules
+
+### GS75 CUDA-First Rule (Required)
+
+- On machine `GS75`, Monte Carlo must try CUDA first.
+- On non-`GS75`, run remote first:
+  - `ssh GS75 'cd /Users/rc/Project/Homeland && npm run balance:gs75'`
+- First required command on GS75:
+  - `cd /Users/rc/Project/Homeland`
+  - `npm run balance:gs75`
+- If CUDA-required run fails because CUDA runtime is unavailable, record that explicitly, then run CPU fallback:
+  - `npm run balance:sim`
+
+### Coverage Rule (Required per balancing cycle)
+
+- random baseline (`random_all`),
+- campaign retention baseline (~100 runs/map, chained),
+- fixed-budget pass-rate check (~1000 runs/map with retained-coins seeding),
+- mixed baseline (`balanced`),
+- mono scenarios (arrow/bomb/fire/wind/lightning),
+- at least 3 duo scenarios,
+- OAT sensitivity:
+  - `windSlowMult`
+  - `bombSplashMult`
+  - `fireDpsMult`
+
+### Campaign Standard
+
+- Use retained-coins chaining `r[i]`:
+  - `r[i]` = minimal retained coins after passing maps `1..i`,
+  - next-map budget = `r[i] + initial[i+1]`.
+- Progression criterion:
+  - one failed run should cost about `2` run-equivalents of XP progress.
+- Pass-rate trend targets:
+  - Map 1: ~90%
+  - Map 2: ~85%
+  - Map 3: ~80%
+  - Map 4: ~77%
+  - Map 5: `58% +/- 5%` (active target)
+  - Map 6+: derive from chained retained budget after previous map is stabilized.
+
+### Preferred balancing levers
+
+- Prefer enemy-side tuning first:
+  - enemy HP/speed/reward,
+  - map `enemyScale`,
+  - leak penalties,
+  - wave composition.
+- Avoid frequent tower-curve rewrites unless tower role is fundamentally broken.
+
+### Simulation commands
+
+- Full suite: `npm run balance:sim`
+- Pass-standard only: `npm run balance:standard`
+- Diversity + OAT reruns: `npm run balance:diversity`
+- GPU quick check: `npm run balance:gpu-check`
+
+## Cloudflare Publish Rule (Default)
+
+Required public hostname:
+- `homeland.secana.top`
+
+Default behavior after implementing project changes:
+- publish to `homeland.secana.top` unless user explicitly says not to.
+
+Minimum publish verification:
+1. `curl -I https://homeland.secana.top` returns HTTP `200`.
+2. Fetched page HTML includes expected new UI/content marker.
+
+Tunnel setup/run:
+1. `cloudflared tunnel login` (one-time if needed).
+2. `./scripts/cloudflare-tunnel-setup.sh`
+3. Start app: `npm run dev`
+4. Start tunnel: `./scripts/cloudflare-tunnel-run.sh`
+
+Quick temporary URL (no custom domain):
+- `npm run tunnel:quick`
 
 ## Working Practices for Agents
 
 - Keep changes small and incremental.
-- Prefer config-first changes for balancing.
-- Build slot coordinates are authoritative map design data: slots must appear exactly at configured locations; do not auto-generate, densify, or offset slot positions from authored map coordinates.
-- Add or update docs whenever game rules change.
-- For any new mechanic, define:
+- Prefer config-first changes for balancing/content.
+- Update docs when rules/contracts/workflow change.
+- For every new mechanic, explicitly define:
   - player-facing behavior,
-  - system owner/module,
-  - data fields required,
+  - owning system/module,
+  - required data fields,
   - test scenario.
+- When touching runtime-critical behavior, validate with relevant tests (`npm test`; add e2e when UI flow changes).
 
-## MVP Milestones
+## Commit and Git Protocol
 
-1. Foundation
-- Set up project structure.
-- Implement config loading.
-- Implement map path + build slots.
+- Commit frequently in small increments.
+- Use clear commit messages with intent prefix (e.g., `Fix:`, `Feature:`, `Docs:`, `Perf:`, `Test:`, `Deploy:`).
+- Push after each meaningful checkpoint when network/remote access is available.
+- Do not rewrite history unless explicitly requested.
 
-2. Core Gameplay
-- Add tower placement and 3 base tower types.
-- Add enemy movement along river path.
-- Add damage/combat and wave completion.
-
-3. Economy + Progression
-- Add initial coins, rewards, costs, penalties.
-- Add XP gain/loss and next-map unlock logic.
-
-4. Polish for First Playable
-- HUD clarity.
-- Basic VFX/SFX placeholders.
-- Balance pass for Map 1.
-
-## Out of Scope (For Now)
-
-- Enemy boat attacks against towers.
-- Advanced abilities and status combinations beyond basic element behavior.
-- Meta systems (inventory/hero/cards/etc.).
-- Multiplayer.
-
-## Definition of Done (for each gameplay task)
+## Definition of Done (Gameplay/Runtime Changes)
 
 - Mechanic works in playable scene.
-- Data is configurable without code edits.
-- Basic edge cases are handled.
-- README and relevant docs are updated.
+- Behavior is config-driven where appropriate.
+- Edge cases are handled.
+- Tests or explicit validation steps are updated.
+- Docs (`README.md` and/or this file) are updated when rules/contracts change.
 
-## Runtime Stack
+## Legacy / Historical Docs Note
 
-- Primary implementation stack: JavaScript/TypeScript-oriented web runtime.
-- Main playable prototype location: `/Users/rc/Project/Homeland/web`.
-- Dev server command: `npm run dev` (serves `web/` on `http://127.0.0.1:4173`).
-- Test command: `npm test`.
-- Legacy Python prototype in `/Users/rc/Project/Homeland/src/homeland` is reference-only and not the default implementation path.
-
-## Monte Carlo Balancing (GS75 CUDA-First Rule)
-
-- When running any Monte Carlo balancing simulation on machine `GS75`, CUDA must be prioritized first.
-- On `GS75`, do not run CPU Monte Carlo first when CUDA is available.
-- If current host is not `GS75`, run Monte Carlo on `GS75` remotely via SSH first (for example `ssh GS75 'cd /Users/rc/Project/Homeland && npm run balance:gs75'`).
-- Local CPU Monte Carlo on non-`GS75` hosts is fallback-only and must be used only when `GS75` execution is unavailable.
-- Required first attempt on GS75:
-  - `cd /Users/rc/Project/Homeland`
-  - `npm run balance:gs75`
-- The simulation runner performs CUDA runtime detection when `--cuda` is enabled.
-- `balance:gs75` uses `--cuda-required`: it must fail fast if CUDA is unavailable.
-- If `balance:gs75` fails due missing CUDA runtime, record this explicitly and then run CPU fallback with:
-  - `npm run balance:sim`
-
-## Balancing Coverage Rule
-
-- Balance validation must include diversity and controlled-variable checks, not only a single mixed policy run.
-- Map standard difficulty scale must use retained-coins Monte Carlo chaining:
-  - keep a retained-coins array `r[N]`,
-  - define `r[i]` as the minimal retained coins after passing Maps `1..i` in campaign Monte Carlo runs,
-  - for Map `i+1`, set simulation budget as `r[i] + initial[i+1]`,
-  - run Monte Carlo fleet simulations on Map `i+1` with this budget and record pass rate (`pass = fully neutralize all pirate boats`),
-  - scale difficulty toward target pass rate by tuning slot unlock price / tower slot price, fleet HP, fleet speed, and fleet specialties/wave composition.
-- Required coverage in a balancing cycle:
-  - random baseline (`random_all` policy using initial map coins),
-  - campaign retention baseline (about `100` random-policy runs per map, passing all previous maps first, then averaging retained coins),
-  - fixed-budget pass-rate check (about `1000` runs per map, seeded with retained-coins baseline),
-  - mixed baseline (`balanced` policy) for tower composition comparison,
-  - mono tower scenarios (arrow, bomb, fire, wind, lightning),
-  - duo tower scenarios (at least 3 combinations),
-  - OAT sensitivity for `windSlowMult`, `bombSplashMult`, `fireDpsMult`.
-- Progression pass criteria:
-  - one failed run should deduct roughly `2` run-equivalents of XP progress,
-  - expected run targets to pass should scale roughly `30`, `50`, `60`, `90`, `100`... by map difficulty.
-- Campaign random-policy difficulty targets should trend near:
-  - Map 1 clear rate: ~90%
-  - Map 2 clear rate: ~85%
-  - Map 3 clear rate: ~80%
-  - Map 4 clear rate: ~77%
-  - Map 5 clear rate: `58% +/- 5%` (active revision target)
-  - Map 6 clear rate: derive from `r[5] + initial[6]` after Map 5 target is stabilized
-- Prefer enemy-side scaling for progression updates:
-  - adjust enemy HP/speed/rewards, map `enemyScale`, leak penalties, and wave composition first;
-  - avoid frequent tower-curve rewrites unless a tower role is fundamentally broken.
-- Use:
-  - `npm run balance:sim` for full search + pass-standard + diversity + OAT,
-  - `npm run balance:standard` for pass-standard only (retention + fixed-budget pass-rate),
-  - `npm run balance:diversity` for faster no-search diversity/OAT reruns.
-
-## Cloudflare Tunnel Publish (Required Hostname)
-
-Publish target must be:
-- `homeland.secana.top`
-
-DNS authority for this project:
-- Use the currently active `secana.top` Cloudflare zone.
-- Do not switch nameservers just to publish this app if the zone is already active.
-
-### One-time setup
-
-1. Authenticate cloudflared:
-- `cloudflared tunnel login`
-
-2. Create/configure tunnel and DNS route:
-- `cd /Users/rc/Project/Homeland`
-- `./scripts/cloudflare-tunnel-setup.sh`
-
-This script:
-- creates tunnel `homeland-web` if missing,
-- routes DNS for `homeland.secana.top`,
-- writes project-local `/Users/rc/Project/Homeland/.cloudflared/config.yml` with ingress to `http://127.0.0.1:4173`.
-- should not overwrite tunnel config for other projects.
-
-### Run publish
-
-1. Start local web app:
-- `cd /Users/rc/Project/Homeland`
-- `npm run dev`
-
-2. Start tunnel:
-- `./scripts/cloudflare-tunnel-run.sh`
-
-### Default Live Update Rule
-
-- After implementing project changes, publish to `homeland.secana.top` by default (unless user explicitly says not to publish).
-- Minimum publish verification:
-  - `curl -I https://homeland.secana.top` must return HTTP `200`,
-  - fetch page HTML and verify the expected new UI/content marker is present.
-- If one-time setup blocks on browser login but token credentials already exist locally (for example from another project), reuse those stored Cloudflare tunnel credentials and continue with token-based tunnel run.
-
-### Quick temporary URL (no custom domain)
-
-- `npm run tunnel:quick`
-
-### Files
-
-- Setup script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-setup.sh`
-- Run script: `/Users/rc/Project/Homeland/scripts/cloudflare-tunnel-run.sh`
-- Template config: `/Users/rc/Project/Homeland/.cloudflared/config.yml.example`
+- `docs/action-plan.md` and `docs/task-list.md` include early planning scaffolds and may not reflect current implementation status.
+- When conflicts exist, code and this `AGENTS.md` are authoritative for current operations.
