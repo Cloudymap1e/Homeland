@@ -201,6 +201,34 @@ export class HomelandGame {
       killed: 0,
       leaked: 0,
     };
+    this.recoverFreshRunEconomy();
+  }
+
+  isFreshBuildRun() {
+    return this.state === 'build_phase'
+      && this.waveIndex < 0
+      && this.spawnQueue.length === 0
+      && this.enemies.length === 0
+      && this.result === null;
+  }
+
+  recoverFreshRunEconomy() {
+    if (!this.isFreshBuildRun()) {
+      return false;
+    }
+    if (this.coins > 0) {
+      return false;
+    }
+    if (this.towers.size > 0) {
+      return false;
+    }
+
+    const startingCoins = Math.max(0, Math.round(Number(this.mapConfig.startingCoins) || 0));
+    if (startingCoins <= 0) {
+      return false;
+    }
+    this.coins = startingCoins;
+    return true;
   }
 
   setSpeed(multiplier) {
@@ -508,6 +536,7 @@ export class HomelandGame {
 
     this.lastAttacks = [];
     this.events = [];
+    this.recoverFreshRunEconomy();
     this.unlockByCampaignProgress();
     return true;
   }

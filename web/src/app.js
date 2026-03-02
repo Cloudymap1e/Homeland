@@ -30,6 +30,7 @@ const elResultHandle = document.getElementById('result-handle');
 const elCurveHandle = document.getElementById('curve-handle');
 
 const btnStartWave = document.getElementById('start-wave');
+const btnResetRun = document.getElementById('reset-run');
 const btnToggleSpeed = document.getElementById('toggle-speed');
 const btnFastForwardWave = document.getElementById('fast-forward-wave');
 const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
@@ -2226,6 +2227,20 @@ function loadSelectedMap() {
   scheduleProgressPersist();
 }
 
+function resetCurrentRun() {
+  game.reset({ mapId: game.mapId, carryResources: false });
+  markLocalMutation();
+  selectedSlotId = null;
+  fastForwardUntilMs = 0;
+  slotPopoutNotice = '';
+  closeSlotPopout();
+  visualEffects.length = 0;
+  renderStaticMapLayersFastThenFull();
+  updateMapMeta();
+  updateHud();
+  scheduleProgressPersist();
+}
+
 function triggerFastForwardWave() {
   if (['build_phase', 'wave_result'].includes(game.state)) {
     const startRes = game.startNextWave();
@@ -2315,6 +2330,10 @@ btnStartWave.addEventListener('click', () => {
   }
   updateHud();
   scheduleProgressPersist();
+});
+
+btnResetRun.addEventListener('click', () => {
+  resetCurrentRun();
 });
 
 btnToggleSpeed.addEventListener('click', () => {

@@ -384,6 +384,21 @@ test('map switching can carry coins and xp for auto-continue', () => {
   assert.equal(game.getNextMapId(), 'map_03_marsh_maze');
 });
 
+test('map switching with empty treasury restores fresh-run starting coins', () => {
+  const game = new HomelandGame();
+  game.completedMaps.add('map_01_river_bend');
+  game.xp = 2500;
+  game.unlockByCampaignProgress();
+  game.coins = -120;
+
+  const setRes = game.setMap('map_02_split_delta', { carryResources: true });
+  assert.equal(setRes.ok, true);
+  assert.equal(game.mapConfig.mapId, 'map_02_split_delta');
+  assert.equal(game.waveIndex, -1);
+  assert.equal(game.towers.size, 0);
+  assert.equal(game.coins, game.mapConfig.startingCoins);
+});
+
 test('state can export and import with active wave progress', () => {
   const source = new HomelandGame({ mapId: 'map_02_split_delta' });
   source.completedMaps.add('map_01_river_bend');
@@ -409,6 +424,37 @@ test('state can export and import with active wave progress', () => {
   assert.equal(restored.spawnQueue.length, source.spawnQueue.length);
   assert.equal(restored.enemies.length, source.enemies.length);
   assert.equal(restored.getTower(slotId)?.towerId, 'arrow');
+});
+
+test('importState restores starting coins for stuck zero-coin fresh build state', () => {
+  const game = new HomelandGame();
+  const payload = {
+    mapId: 'map_02_split_delta',
+    unlockedMapIds: ['map_01_river_bend', 'map_02_split_delta'],
+    completedMapIds: ['map_01_river_bend'],
+    paidSlotIds: [],
+    state: 'build_phase',
+    coins: 0,
+    xp: 3000,
+    waveIndex: -1,
+    speed: 1,
+    spawnCooldown: 0,
+    spawnQueue: [],
+    currentWaveLeaks: 0,
+    enemies: [],
+    nextEnemyId: 1,
+    towers: [],
+    fireZones: [],
+    result: null,
+    stats: { spawned: 0, killed: 0, leaked: 0 },
+  };
+
+  const ok = game.importState(payload);
+  assert.equal(ok, true);
+  assert.equal(game.mapId, 'map_02_split_delta');
+  assert.equal(game.waveIndex, -1);
+  assert.equal(game.towers.size, 0);
+  assert.equal(game.coins, MAPS.map_02_split_delta.startingCoins);
 });
 
 test('importState safely ignores malformed entities', () => {
