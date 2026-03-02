@@ -154,6 +154,10 @@ button.active {
   margin-top: 4px;
 }
 
+.overlay-hud.hidden-hud {
+  display: none;
+}
+
 .overlay-chip {
   padding: 8px 10px;
   border: 1px solid var(--chip-border);

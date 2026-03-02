@@ -19,6 +19,7 @@ const elMapOverlay = document.getElementById('map-overlay');
 const elWaveOverlay = document.getElementById('wave-overlay');
 const elBoatsOverlay = document.getElementById('boats-overlay');
 const elStateOverlay = document.getElementById('state-overlay');
+const elOverlayHud = document.querySelector('.overlay-hud');
 const elCurveTower = document.getElementById('curve-tower');
 const curveCanvas = document.getElementById('curve-chart');
 const curveCtx = curveCanvas.getContext('2d');
@@ -36,6 +37,7 @@ const btnFastForwardWave = document.getElementById('fast-forward-wave');
 const btnToggleAutoContinue = document.getElementById('toggle-auto-continue');
 const btnToggleReportPanel = document.getElementById('toggle-report-panel');
 const btnToggleCurvePanel = document.getElementById('toggle-curve-panel');
+const btnToggleOverlayHud = document.getElementById('toggle-overlay-hud');
 const btnHideReportPanel = document.getElementById('hide-report-panel');
 const btnHideCurvePanel = document.getElementById('hide-curve-panel');
 
@@ -53,6 +55,7 @@ let slotPopoutNotice = '';
 let slotPopoutRenderKey = '';
 let reportPanelVisible = true;
 let curvePanelVisible = true;
+let overlayHudVisible = true;
 let mapSelectRenderKey = '';
 
 const SLOT_RADIUS = 16;
@@ -533,8 +536,10 @@ function resizeCanvasToViewport(options = {}) {
 function updatePanelButtons() {
   btnToggleReportPanel.textContent = reportPanelVisible ? 'Hide Report' : 'Show Report';
   btnToggleCurvePanel.textContent = curvePanelVisible ? 'Hide Curves' : 'Show Curves';
+  btnToggleOverlayHud.textContent = overlayHudVisible ? 'Hide HUD' : 'Show HUD';
   btnToggleReportPanel.classList.toggle('active', reportPanelVisible);
   btnToggleCurvePanel.classList.toggle('active', curvePanelVisible);
+  btnToggleOverlayHud.classList.toggle('active', overlayHudVisible);
 }
 
 function setPanelVisibility(panelId, visible) {
@@ -544,6 +549,9 @@ function setPanelVisibility(panelId, visible) {
   } else if (panelId === 'curve') {
     curvePanelVisible = visible;
     elCurveWindow.classList.toggle('hidden-window', !visible);
+  } else if (panelId === 'overlay_hud') {
+    overlayHudVisible = visible;
+    elOverlayHud.classList.toggle('hidden-hud', !visible);
   }
   updatePanelButtons();
 }
@@ -732,6 +740,7 @@ function createProgressPayload() {
     selectedCurveTowerId,
     reportPanelVisible,
     curvePanelVisible,
+    overlayHudVisible,
     game: game.exportState(),
   };
 }
@@ -743,6 +752,7 @@ function createProgressFingerprint(payload) {
     selectedCurveTowerId: payload.selectedCurveTowerId,
     reportPanelVisible: payload.reportPanelVisible,
     curvePanelVisible: payload.curvePanelVisible,
+    overlayHudVisible: payload.overlayHudVisible,
     game: payload.game,
   };
   return JSON.stringify(stable);
@@ -812,6 +822,7 @@ function applyPersistedProgress(payload) {
   autoContinueEnabled = Boolean(payload.autoContinueEnabled);
   reportPanelVisible = payload.reportPanelVisible !== false;
   curvePanelVisible = payload.curvePanelVisible !== false;
+  overlayHudVisible = payload.overlayHudVisible !== false;
 
   selectedSlotId = null;
   slotPopoutNotice = '';
@@ -828,6 +839,7 @@ function applyPersistedProgress(payload) {
   markCurveDirty();
   setPanelVisibility('report', reportPanelVisible);
   setPanelVisibility('curve', curvePanelVisible);
+  setPanelVisibility('overlay_hud', overlayHudVisible);
   renderStaticMapLayersFastThenFull();
   updateMapMeta();
   updateHud();
@@ -2367,6 +2379,12 @@ btnToggleReportPanel.addEventListener('click', () => {
 btnToggleCurvePanel.addEventListener('click', () => {
   markLocalMutation();
   setPanelVisibility('curve', !curvePanelVisible);
+  scheduleProgressPersist();
+});
+
+btnToggleOverlayHud.addEventListener('click', () => {
+  markLocalMutation();
+  setPanelVisibility('overlay_hud', !overlayHudVisible);
   scheduleProgressPersist();
 });
 
