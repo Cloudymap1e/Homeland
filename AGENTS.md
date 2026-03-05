@@ -19,8 +19,20 @@ This file defines the operational contract for agents working in Homeland. Follo
 - D1 schema: `schema/progress.sql`.
 - Monte Carlo and balance validation: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`.
 - CUDA wave backend: `scripts/cuda/wave_sim.cu`, `scripts/gpu-wave-runner.mjs`, `scripts/build-gpu-wave-sim.sh`.
+- Production config and bindings: `wrangler.toml`.
+- Progress migration tooling: `scripts/migrate-progress-to-d1.mjs`.
 
 Do not invent parallel gameplay configs or duplicate rule constants outside these owners.
+
+## Execution Entry Points
+
+- Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
+- Build production web bundle: `npm run build:web`.
+- Preview built bundle: `npm run preview:web`.
+- Deploy to Cloudflare Pages: `npm run pages:deploy`.
+- Run unit/system tests: `npm test`.
+- Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
+- Run load/perf harness: `npm run perf:load`.
 
 ## Runtime Architecture (Current)
 
@@ -70,6 +82,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
   - run: `scripts/cloudflare-tunnel-run.sh`
+- Avoid long-lived local serving for routine validation; prefer deploying to active staging/production target and verifying there.
 
 ## Gameplay Rules (Current Contract)
 
@@ -118,6 +131,11 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - `windSlowMult`,
   - `bombSplashMult`,
   - `fireDpsMult`.
+- Preferred command sequence:
+  - `npm run balance:gs75` (primary full CUDA-required suite),
+  - `npm run balance:standard` (criteria-only confirmation),
+  - `npm run balance:diversity` (mono/duo/mixed robustness),
+  - `npm run balance:gpu-check` (quick native GPU sanity when CUDA path changes).
 
 ### Campaign Targets
 
@@ -140,6 +158,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
   - Pages Function + D1 flow (`functions/api/progress.js` + migrated schema).
+- Legacy Python tests under `tests/*.py` cover reference prototype behavior only; do not treat them as the primary gameplay validation gate.
 
 ## Agent Workflow Rules
 
@@ -153,6 +172,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - keep `scripts/dev-server.mjs` and `functions/api/progress.js` behavior aligned.
 - When modifying map slots:
   - validate blocked-slot behavior and no-river-placement tests.
+- Diagnose failures by source before fixing:
+  - local runtime bug,
+  - CI/CD/deploy pipeline issue,
+  - local-vs-server sync discrepancy.
 
 ## Definition of Done (Per Gameplay/System Change)
 
