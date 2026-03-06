@@ -14,8 +14,11 @@ This file defines the operational contract for agents working in Homeland. Follo
 - Gameplay/balance configs and map authored coordinates: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
 - Rendering/UI/HUD/persistence orchestration: `web/src/app.js`.
+- Runtime HUD/controls markup shell: `web/index.html`.
 - Production progress API (Cloudflare Pages Functions + D1): `functions/api/progress.js`.
 - Local dev progress API emulation + static server: `scripts/dev-server.mjs`.
+- Production bundle pipeline + cache headers: `scripts/build-web.mjs`.
+- Dist preview server + `/api/*` stub: `scripts/preview-web.mjs`.
 - D1 schema: `schema/progress.sql`.
 - Monte Carlo and balance validation: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`.
 - CUDA wave backend: `scripts/cuda/wave_sim.cu`, `scripts/gpu-wave-runner.mjs`, `scripts/build-gpu-wave-sim.sh`.
@@ -29,10 +32,12 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
 - Build production web bundle: `npm run build:web`.
 - Preview built bundle: `npm run preview:web`.
+- Preview built bundle with Cloudflare runtime: `npm run pages:dev`.
 - Deploy to Cloudflare Pages: `npm run pages:deploy`.
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
 - Run load/perf harness: `npm run perf:load`.
+- Run migration generator/apply tool for progress store: `npm run migrate:d1`.
 
 ## Runtime Architecture (Current)
 
@@ -133,8 +138,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - `fireDpsMult`.
 - Preferred command sequence:
   - `npm run balance:gs75` (primary full CUDA-required suite),
+  - `npm run balance:verify` (quick all-map verification without search),
   - `npm run balance:standard` (criteria-only confirmation),
   - `npm run balance:diversity` (mono/duo/mixed robustness),
+  - `npm run balance:cuda-check` (fast CUDA availability/system check),
   - `npm run balance:gpu-check` (quick native GPU sanity when CUDA path changes).
 
 ### Campaign Targets
@@ -155,6 +162,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - E2E regression: `npm run test:e2e` (Playwright).
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
 - Performance/load metrics: `npm run perf:load`.
+- Perf defaults probe both local and published URLs (`http://127.0.0.1:4173`, `https://homeland.secana.top`) unless overridden with `--urls=...`.
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
   - Pages Function + D1 flow (`functions/api/progress.js` + migrated schema).
@@ -164,7 +172,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - Keep commits small and focused; commit and push frequently.
 - Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
-- Do not run long-lived local servers unless explicitly necessary for the requested task.
+- Do not run long-lived local servers unless explicitly necessary for the requested task; prefer deploy + verify on active staging/production target.
 - Do not modify legacy Python prototype for gameplay features unless user explicitly asks.
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.
