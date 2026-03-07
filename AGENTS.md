@@ -29,10 +29,16 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
 - Build production web bundle: `npm run build:web`.
 - Preview built bundle: `npm run preview:web`.
+- Preview dist with Pages runtime locally (dist required): `npm run pages:dev`.
 - Deploy to Cloudflare Pages: `npm run pages:deploy`.
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
 - Run load/perf harness: `npm run perf:load`.
+- Balance quick verification suite (criteria sanity): `npm run balance:verify`.
+- Balance CUDA availability check (can fall back): `npm run balance:cuda-check`.
+- Build native GPU wave simulator binary: `npm run build:gpu-wave`.
+- Migrate local progress JSON to D1 SQL/apply flow: `npm run migrate:d1 -- --db=<database> [--apply --verify --truncate]`.
+- Quick temporary tunnel for local URL checks: `npm run tunnel:quick` (do not use as standard validation path).
 
 ## Runtime Architecture (Current)
 
@@ -68,6 +74,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - Cloudflare Pages Function at `functions/api/progress.js`,
   - D1 binding `PROGRESS_DB`,
   - tables `sessions` and `ip_index` from `schema/progress.sql`.
+- Preview caveat:
+  - `npm run preview:web` serves static `dist` and returns an API stub for `/api/*` (progress is always `null` there),
+  - use `npm run dev` (local emulation) or deployed Pages target for real persistence behavior.
 - Client behavior (`web/src/app.js`):
   - loads local snapshot first, then remote with timeout-retry merge,
   - keeps local fallback if remote save fails,
@@ -78,11 +87,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Build: `npm run build:web` (esbuild bundles app + hashed assets into `dist/`).
 - Preview dist: `npm run preview:web`.
 - Cloudflare Pages deploy: `npm run pages:deploy`.
+- Pages local runtime preview: `npm run pages:dev` (for function/runtime parity checks after building `dist`).
 - Tunnel publish hostname requirement: `homeland.secana.top`.
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
   - run: `scripts/cloudflare-tunnel-run.sh`
 - Avoid long-lived local serving for routine validation; prefer deploying to active staging/production target and verifying there.
+- Never rely on preview stub responses as persistence verification evidence.
 
 ## Gameplay Rules (Current Contract)
 
@@ -118,6 +129,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - `balance:gs75` fails fast if CUDA runtime is unavailable.
 - Only if GS75 path is unavailable or CUDA runtime missing, run CPU fallback:
   - `npm run balance:sim`
+- GPU engine binary contract:
+  - required binary path defaults to `scripts/cuda/bin/wave_sim`,
+  - override via `HOMELAND_GPU_WAVE_BIN`,
+  - missing binary is a hard error for `--engine=gpu` or `--cuda-required`.
 
 ### Required Coverage in a Balancing Cycle
 
@@ -133,8 +148,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - `fireDpsMult`.
 - Preferred command sequence:
   - `npm run balance:gs75` (primary full CUDA-required suite),
+  - `npm run balance:verify` (quick smoke after tuning edits),
   - `npm run balance:standard` (criteria-only confirmation),
   - `npm run balance:diversity` (mono/duo/mixed robustness),
+  - `npm run balance:cuda-check` (CUDA availability sanity, non-required mode),
   - `npm run balance:gpu-check` (quick native GPU sanity when CUDA path changes).
 
 ### Campaign Targets
@@ -176,6 +193,15 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - local runtime bug,
   - CI/CD/deploy pipeline issue,
   - local-vs-server sync discrepancy.
+- Push protocol for every completed change batch:
+  - `git status` (verify only intended files changed),
+  - `git add <files>` + `git commit -m "<typed intent>: <summary>"`,
+  - `git push` to configured remote branch,
+  - if push fails, document blocker and stop claiming deployment completion.
+- Deployment validation order (when relevant):
+  - verify build (`npm run build:web`),
+  - deploy (`npm run pages:deploy`),
+  - validate target behavior on deployed URL (not only local preview).
 
 ## Definition of Done (Per Gameplay/System Change)
 
