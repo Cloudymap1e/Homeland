@@ -29,10 +29,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
 - Build production web bundle: `npm run build:web`.
 - Preview built bundle: `npm run preview:web`.
+- Preview built bundle with Pages runtime shim: `npm run pages:dev`.
 - Deploy to Cloudflare Pages: `npm run pages:deploy`.
+- Run D1 progress migration: `npm run migrate:d1`.
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
 - Run load/perf harness: `npm run perf:load`.
+- Build native GPU wave backend binary: `npm run build:gpu-wave`.
 
 ## Runtime Architecture (Current)
 
@@ -58,6 +61,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ### Persistence and Progress Contract
 
 - Endpoint: `/api/progress` (GET/PUT/POST/DELETE).
+- Request payload contract for PUT/POST:
+  - body must be a JSON object (arrays/scalars rejected),
+  - body size limit is `1,000,000` bytes (dev + Pages function parity).
 - Session identity:
   - primary: `homeland_sid` cookie,
   - fallback mapping: client IP index.
@@ -118,6 +124,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - `balance:gs75` fails fast if CUDA runtime is unavailable.
 - Only if GS75 path is unavailable or CUDA runtime missing, run CPU fallback:
   - `npm run balance:sim`
+- Optional fast CUDA availability smoke (non-required): `npm run balance:cuda-check`
 
 ### Required Coverage in a Balancing Cycle
 
@@ -135,6 +142,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - `npm run balance:gs75` (primary full CUDA-required suite),
   - `npm run balance:standard` (criteria-only confirmation),
   - `npm run balance:diversity` (mono/duo/mixed robustness),
+  - `npm run balance:verify` (quick random-all confirmation without search),
   - `npm run balance:gpu-check` (quick native GPU sanity when CUDA path changes).
 
 ### Campaign Targets
@@ -155,6 +163,8 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - E2E regression: `npm run test:e2e` (Playwright).
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
 - Performance/load metrics: `npm run perf:load`.
+  - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
+  - override with `--urls=<comma-separated URLs>` when validating specific environments.
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
   - Pages Function + D1 flow (`functions/api/progress.js` + migrated schema).
@@ -164,7 +174,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - Keep commits small and focused; commit and push frequently.
 - Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
+- Validate commit-message hygiene against recent history before finalizing a docs/process-only run.
 - Do not run long-lived local servers unless explicitly necessary for the requested task.
+- Prefer deployed target verification for runtime checks; do not rely on prolonged local-host sessions.
 - Do not modify legacy Python prototype for gameplay features unless user explicitly asks.
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.
