@@ -14,6 +14,8 @@ This file defines the operational contract for agents working in Homeland. Follo
 - Gameplay/balance configs and map authored coordinates: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
 - Rendering/UI/HUD/persistence orchestration: `web/src/app.js`.
+- Runtime shell and control surface markup: `web/index.html`.
+- Runtime visual language and layout contracts: `web/styles.css`.
 - Production progress API (Cloudflare Pages Functions + D1): `functions/api/progress.js`.
 - Local dev progress API emulation + static server: `scripts/dev-server.mjs`.
 - D1 schema: `schema/progress.sql`.
@@ -35,7 +37,16 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
 - Run load/perf harness: `npm run perf:load`.
+- Run full GS75 CUDA-required balance cycle: `npm run balance:gs75`.
+- Run criteria-only balance confirmation: `npm run balance:standard`.
+- Run policy-diversity robustness suite: `npm run balance:diversity`.
+- Run quick random-all verification: `npm run balance:verify`.
+- Run CUDA availability smoke: `npm run balance:cuda-check`.
+- Run native GPU backend sanity suite: `npm run balance:gpu-check`.
+- CPU fallback balance sweep: `npm run balance:sim`.
 - Build native GPU wave backend binary: `npm run build:gpu-wave`.
+- Quick ephemeral tunnel to local runtime: `npm run tunnel:quick`.
+- Named tunnel run using `.cloudflared/config.yml`: `npm run tunnel:run`.
 
 ## Runtime Architecture (Current)
 
@@ -44,15 +55,22 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - `web/index.html` defines the command deck and HUD controls:
   - map select, reset run, start wave, speed toggle, fast-forward, auto waves,
   - report panel toggle, curve panel toggle, top HUD strip toggle.
+- `web/styles.css` defines:
+  - top control deck layout and responsive behavior,
+  - HUD chips/panels and slot-popout presentation,
+  - draggable panel visual styles and visibility classes.
 - `web/src/app.js` owns:
   - frame loop and rendering layers,
   - slot-popout interactions (activate/build/upgrade/sell),
   - fast-forward wave compression and auto-continue flow,
   - draggable/closable report and curve windows,
+  - top HUD strip visibility toggle,
   - persistence bootstrap/merge across local + remote progress stores.
 - `web/src/game-core.js` owns:
   - state machine (`build_phase`, `wave_running`, `wave_result`, `map_result`),
+  - map unlock gating and campaign completion state,
   - tower placement/upgrade/sell and slot activation,
+  - blocked-slot detection using route clearance,
   - wave spawn progression and route movement,
   - combat effects (bomb splash, fire zones + burn, wind slow multi-target, lightning chain),
   - leak penalties and map clear/defeat resolution,
@@ -173,11 +191,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ## Agent Workflow Rules
 
 - Keep commits small and focused; commit and push frequently.
-- Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
+- Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`, `Test: ...`, `Balance: ...`, `Tooling: ...`, `UI: ...`, `UX: ...`, `Visual: ...`, `Plan: ...`, `Chore: ...`).
 - Validate commit-message hygiene against recent history before finalizing a docs/process-only run.
 - Do not run long-lived local servers unless explicitly necessary for the requested task.
+- This machine should not host routine runtime sessions; prefer deployed target checks or GS75 execution unless local runtime is mandatory for Mac-only reproduction.
 - Prefer deployed target verification for runtime checks; do not rely on prolonged local-host sessions.
 - Do not modify legacy Python prototype for gameplay features unless user explicitly asks.
+- If README and runtime behavior conflict, treat `web/src/*` + this file as source of truth and patch README in the same change stream.
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.
 - When modifying persistence contract:
@@ -188,6 +208,18 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - local runtime bug,
   - CI/CD/deploy pipeline issue,
   - local-vs-server sync discrepancy.
+
+## Docs Sync Checklist (Required for AGENTS/README updates)
+
+- Scan recent commits (`git log --oneline`) and align operational guidance with current commit taxonomy.
+- Verify every command in docs against `package.json` scripts and referenced script files.
+- Re-validate architecture claims against runtime owners:
+  - `web/src/config.js`,
+  - `web/src/game-core.js`,
+  - `web/src/app.js`,
+  - `functions/api/progress.js`,
+  - `scripts/dev-server.mjs`.
+- Re-check persistence contract invariants (session ID source, payload shape, body limits) in both dev and production handlers.
 
 ## Definition of Done (Per Gameplay/System Change)
 

@@ -2,6 +2,19 @@
 
 Homeland is a tower defense strategy game where the player protects river routes from pirate fleets.
 
+## Runtime Owners (Current)
+
+- Runtime of record: browser JS prototype in `web/`.
+- Primary gameplay/balance source: `web/src/config.js`.
+- Runtime state machine/combat source: `web/src/game-core.js`.
+- Rendering/UI/persistence orchestration: `web/src/app.js`.
+- Runtime shell controls: `web/index.html` + `web/styles.css`.
+- Progress APIs:
+  - production: `functions/api/progress.js` (Cloudflare Pages Functions + D1),
+  - local parity server: `scripts/dev-server.mjs`.
+
+Operational contract for agents is defined in `AGENTS.md`; if README and runtime behavior diverge, align both in the same change stream.
+
 ## High-Level Concept
 
 - Player starts on the first map.
@@ -232,7 +245,7 @@ Campaign progression additions:
 - Coins and XP carry forward across map transitions.
 - Each cleared map grants a clear reward (coins/XP).
 - Map unlocks are sequential (cannot skip earlier maps).
-- New playable map added: `Map 4 - Tide Lock`.
+- Playable maps currently span `Map 1` through `Map 5`.
 
 Progress persistence:
 - Player progress now auto-saves continuously and on tab close.
@@ -251,6 +264,12 @@ Run tests:
 ```bash
 cd /Users/rc/Project/Homeland
 npm test
+```
+
+Balance workflow (GS75 CUDA-first):
+
+```bash
+ssh GS75 'cd /Users/rc/Project/Homeland && npm run balance:gs75'
 ```
 
 Monte Carlo balance run (1,000 simulations, all maps):
