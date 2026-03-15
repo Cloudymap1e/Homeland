@@ -2,6 +2,17 @@
 
 Homeland is a tower defense strategy game where the player protects river routes from pirate fleets.
 
+## Current Runtime Snapshot
+
+- Runtime of record: browser JS prototype under `web/`.
+- Live campaign scope: 5 playable maps, 5 tower families, 50 tower levels, branched routes, sequential map unlocks.
+- Authoritative gameplay config: `web/src/config.js`.
+- Runtime/state machine: `web/src/game-core.js`.
+- Rendering, HUD, fast-forward/auto-continue, and persistence bootstrap: `web/src/app.js`.
+- Progress API:
+  - local dev: `scripts/dev-server.mjs` with `.data/player-progress.json`,
+  - production: `functions/api/progress.js` with Cloudflare Pages Functions + D1 (`schema/progress.sql`).
+
 ## High-Level Concept
 
 - Player starts on the first map.
@@ -11,13 +22,13 @@ Homeland is a tower defense strategy game where the player protects river routes
 
 If enemies pass through, the player is penalized (coins and XP deduction).
 
-## MVP Gameplay Rules
+## Gameplay Rules
 
 ### Starting State
 
 - Starting coins: `10,000`
 - Starting map: `Map 1`
-- Towers available at start: Arrow, Bone, Magic
+- Towers available at start: Arrow, Bomb, and elemental magic variants (Fire/Wind/Lightning)
 
 ### Tower Types
 
@@ -29,9 +40,9 @@ If enemies pass through, the player is penalized (coins and XP deduction).
 - Role: heavy burst damage + splash damage
 - Typical behavior: slower attack speed, high direct hit, AOE splash in nearby radius
 
-3. Magic Tower
+3. Magic Towers
 - Role: elemental effects and burst utility
-- Initial elements:
+- Current elements:
   - Fire (fireball impact + persistent 3-second burn zone + ignite burn DoT on hit boats)
   - Wind (multi-target slow control)
   - Lightning (burst or chain, with short shock-state visuals on affected boats)
@@ -131,6 +142,8 @@ Use external configuration for balance and content scaling.
 
 ## Suggested Project Structure
 
+Current runtime implementation lives under `web/`; the `src/homeland` tree is legacy reference code.
+
 ```txt
 Homeland/
   README.md
@@ -166,7 +179,7 @@ Homeland/
 
 Use your engine/framework equivalent, but keep this separation of concerns.
 
-## MVP Implementation Plan
+## Implementation Outline
 
 1. Base Loop
 - Load Map 1.
@@ -175,7 +188,7 @@ Use your engine/framework equivalent, but keep this separation of concerns.
 
 2. Tower Placement + Combat
 - Restrict placement to valid slots.
-- Implement targeting and attack logic for 3 base towers.
+- Implement targeting and attack logic for all 5 tower families.
 - Add upgrade flow for each tower.
 
 3. Economy + XP
@@ -232,12 +245,14 @@ Campaign progression additions:
 - Coins and XP carry forward across map transitions.
 - Each cleared map grants a clear reward (coins/XP).
 - Map unlocks are sequential (cannot skip earlier maps).
-- New playable map added: `Map 4 - Tide Lock`.
+- Playable maps now run through `Map 5 - Blackwater Lattice`.
 
 Progress persistence:
 - Player progress now auto-saves continuously and on tab close.
 - Session identity is indexed by `homeland_sid` cookie, with client IP fallback if cookie is missing.
-- Data is stored server-side in `/Users/rc/Project/Homeland/.data/player-progress.json` and mirrored in browser `localStorage` as fallback.
+- Local dev data is stored server-side in `/Users/rc/Project/Homeland/.data/player-progress.json`.
+- Production data is stored in Cloudflare D1 via `/api/progress`.
+- Browser `localStorage` remains the client fallback and merge source.
 
 Run local web prototype:
 
@@ -253,7 +268,41 @@ cd /Users/rc/Project/Homeland
 npm test
 ```
 
-Monte Carlo balance run (1,000 simulations, all maps):
+Run E2E against an already-running target:
+
+```bash
+cd /Users/rc/Project/Homeland
+HOMELAND_E2E_BASE_URL=https://homeland.secana.top npm run test:e2e
+```
+
+Build production web bundle:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run build:web
+```
+
+Preview built bundle as static artifact smoke only:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run preview:web
+```
+
+Preview built bundle with Pages runtime / Functions:
+
+```bash
+cd /Users/rc/Project/Homeland
+npm run pages:dev
+```
+
+Primary Monte Carlo balance run on GS75 (CUDA-required):
+
+```bash
+ssh GS75 'cd /Users/rc/Project/Homeland && npm run balance:gs75'
+```
+
+CPU fallback Monte Carlo run when GS75/CUDA is unavailable:
 
 ```bash
 cd /Users/rc/Project/Homeland

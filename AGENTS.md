@@ -11,7 +11,7 @@ This file defines the operational contract for agents working in Homeland. Follo
 
 ## Source of Truth
 
-- Gameplay/balance configs and map authored coordinates: `web/src/config.js`.
+- Gameplay/balance configs, campaign metadata, and map authored coordinates: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
 - Rendering/UI/HUD/persistence orchestration: `web/src/app.js`.
 - Production progress API (Cloudflare Pages Functions + D1): `functions/api/progress.js`.
@@ -19,6 +19,8 @@ This file defines the operational contract for agents working in Homeland. Follo
 - D1 schema: `schema/progress.sql`.
 - Monte Carlo and balance validation: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`.
 - CUDA wave backend: `scripts/cuda/wave_sim.cu`, `scripts/gpu-wave-runner.mjs`, `scripts/build-gpu-wave-sim.sh`.
+- Web build pipeline and cache headers: `scripts/build-web.mjs`.
+- Static dist preview server (API stub only): `scripts/preview-web.mjs`.
 - Production config and bindings: `wrangler.toml`.
 - Progress migration tooling: `scripts/migrate-progress-to-d1.mjs`.
 
@@ -28,35 +30,48 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
 - Build production web bundle: `npm run build:web`.
-- Preview built bundle: `npm run preview:web`.
+- Preview built bundle as static artifact smoke test only: `npm run preview:web` (`scripts/preview-web.mjs`, serves on `127.0.0.1:4180`, `/api/*` returns stub JSON and does not run Pages Functions).
 - Preview built bundle with Pages runtime shim: `npm run pages:dev`.
 - Deploy to Cloudflare Pages: `npm run pages:deploy`.
 - Run D1 progress migration: `npm run migrate:d1`.
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
 - Run load/perf harness: `npm run perf:load`.
+- Run fast CUDA-required balance smoke: `npm run balance:cuda-check`.
+- Run native GPU wave binary sanity check: `npm run balance:gpu-check`.
 - Build native GPU wave backend binary: `npm run build:gpu-wave`.
+- Run project tunnel after setup: `npm run tunnel:run`.
 
 ## Runtime Architecture (Current)
 
 ### Frontend Runtime
 
+- `web/src/config.js` owns:
+  - all map definitions and authored slot coordinates,
+  - route waypoints, `slotRiverClearancePx`, and `riverVisual`,
+  - tower curves/levels for all 5 tower families,
+  - enemy rewards/stats, XP rewards, and campaign pass metadata exports.
 - `web/index.html` defines the command deck and HUD controls:
   - map select, reset run, start wave, speed toggle, fast-forward, auto waves,
   - report panel toggle, curve panel toggle, top HUD strip toggle.
+  - DOM ids here are coupled to Playwright and perf selectors; keep `web/tests/slot-popout.e2e.spec.mjs` and `scripts/perf/load-metrics.mjs` aligned when changing controls or overlay ids.
 - `web/src/app.js` owns:
   - frame loop and rendering layers,
+  - fast-then-full static terrain/river rendering and cache reuse per map,
   - slot-popout interactions (activate/build/upgrade/sell),
   - fast-forward wave compression and auto-continue flow,
   - draggable/closable report and curve windows,
-  - persistence bootstrap/merge across local + remote progress stores.
+  - persistence bootstrap/merge across local + remote progress stores,
+  - local UI state persistence (`autoContinueEnabled`, selected tower ids, panel visibility, HUD visibility).
 - `web/src/game-core.js` owns:
+  - build-slot partitioning into buildable vs river-blocked using route clearance,
   - state machine (`build_phase`, `wave_running`, `wave_result`, `map_result`),
   - tower placement/upgrade/sell and slot activation,
   - wave spawn progression and route movement,
   - combat effects (bomb splash, fire zones + burn, wind slow multi-target, lightning chain),
   - leak penalties and map clear/defeat resolution,
-  - import/export state contract for persistence.
+  - sequential campaign unlock/completion logic,
+  - import/export state contract for persistence, including sanitization of malformed towers/enemies/fire zones on load.
 
 ### Persistence and Progress Contract
 
@@ -64,6 +79,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Request payload contract for PUT/POST:
   - body must be a JSON object (arrays/scalars rejected),
   - body size limit is `1,000,000` bytes (dev + Pages function parity).
+- App payload contract from `web/src/app.js`:
+  - top-level object with `version`, `updatedAt`, UI preferences, and `game`,
+  - `game` is `game.exportState()` and contains map/campaign ids, slots, towers, enemies, fire zones, wave progress, result, and stats.
 - Session identity:
   - primary: `homeland_sid` cookie,
   - fallback mapping: client IP index.
@@ -76,14 +94,25 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - tables `sessions` and `ip_index` from `schema/progress.sql`.
 - Client behavior (`web/src/app.js`):
   - loads local snapshot first, then remote with timeout-retry merge,
+  - applies remote only if newer and no local mutations happened since boot,
   - keeps local fallback if remote save fails,
   - debounced + periodic save, plus unload keepalive save.
+- Save timing details:
+  - debounce: `420ms`,
+  - periodic sync: `1500ms`,
+  - unload path uses `sendBeacon` when available, otherwise `fetch(..., { keepalive: true })`.
+- DELETE semantics:
+  - `DELETE /api/progress` clears stored progress to `null`,
+  - session row and IP mapping remain in place; clients should treat this as reset, not session deletion.
+- Validation warning:
+  - `npm run preview:web` is not a valid persistence/API check because it serves stub `/api/*` responses.
 
 ### Build and Deploy Path
 
-- Build: `npm run build:web` (esbuild bundles app + hashed assets into `dist/`).
-- Preview dist: `npm run preview:web`.
-- Cloudflare Pages deploy: `npm run pages:deploy`.
+- Build: `npm run build:web` (esbuild bundles app into hashed assets under `dist/assets/`, rewrites `dist/index.html`, and emits `dist/_headers`).
+- Preview dist: `npm run preview:web` (static-only smoke, no Pages Functions).
+- Pages-local validation: `npm run pages:dev` (use this for Functions/runtime parity checks).
+- Cloudflare Pages deploy: `npm run pages:deploy` (`wrangler.toml` project name `homeland-web`).
 - Tunnel publish hostname requirement: `homeland.secana.top`.
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
@@ -98,6 +127,8 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Towers can only be built on authored build slots that are not river-blocked.
 - Build slot coordinates are authoritative map data:
   - never auto-generate, densify, offset, or "fix up" slot coordinates at runtime.
+- River blocking is derived from authored routes plus `slotRiverClearancePx`:
+  - if a slot is blocked, fix the authored map data or clearance config instead of force-placing through runtime code.
 - Slot activation is required before building towers.
 - Build and upgrade are allowed during active waves.
 - Tower selling is enabled; refund is `70%` of total invested tower cost.
@@ -106,11 +137,20 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Coins are allowed to go negative during failed waves; run remains resumable.
 - Recovery guard exists for fresh-run soft lock:
   - if run is fresh, no towers, and coins `<= 0`, economy resets to map starting coins.
+- Sequential unlock contract:
+  - next maps require all previous maps completed in order,
+  - XP gate is taken from the current map's `unlockRequirement.minXp`,
+  - full-clear victory marks map complete and can unlock the next map.
+- Auto-continue / carry contract:
+  - map changes can carry coins and XP forward,
+  - if carry is requested onto a fresh build with no towers and treasury `<= 0`, starting coins are restored for the new map.
 - Final-wave leaks force map defeat (`reason: leaks`); no-leak full clear grants map rewards and unlock checks.
 
 ## Config-First Balancing Rules
 
-- Keep balancing parameters in `web/src/config.js`, not hardcoded in gameplay logic.
+- Keep gameplay balance parameters in `web/src/config.js`, not hardcoded in gameplay logic.
+- Monte Carlo acceptance thresholds, policy suites, and search grids live in `scripts/balance-sim.mjs`:
+  - if campaign criteria or benchmark policies change, update `web/src/config.js`, `scripts/balance-sim.mjs`, and this file in the same work stream.
 - Preferred tuning levers for progression difficulty:
   - `enemyScale` (hp/speed/rewards),
   - wave composition/spawn interval,
@@ -160,14 +200,27 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ## Tests and Verification
 
 - Unit/system tests: `npm test` (Node test runner over `web/tests/*.test.mjs`).
+- Current Node coverage includes:
+  - slot activation/build/upgrade economy,
+  - blocked river-slot enforcement,
+  - leak/negative-coin resumability,
+  - sell refund math,
+  - wind/fire/lightning/bomb combat effects,
+  - map switching, carry-resources behavior, and import/export sanitization.
 - E2E regression: `npm run test:e2e` (Playwright).
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
+- E2E assumes the target is already serving the app; prefer `HOMELAND_E2E_BASE_URL=https://homeland.secana.top` or another deployed target unless a short-lived local server is explicitly required.
 - Performance/load metrics: `npm run perf:load`.
   - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
-  - override with `--urls=<comma-separated URLs>` when validating specific environments.
+  - override with `--urls=<comma-separated URLs>` when validating specific environments,
+  - writes dated JSON runs/baselines into `docs/perf/`.
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
   - Pages Function + D1 flow (`functions/api/progress.js` + migrated schema).
+- For DOM/control changes, validate:
+  - `web/index.html`,
+  - `web/tests/slot-popout.e2e.spec.mjs`,
+  - `scripts/perf/load-metrics.mjs`.
 - Legacy Python tests under `tests/*.py` cover reference prototype behavior only; do not treat them as the primary gameplay validation gate.
 
 ## Agent Workflow Rules
@@ -181,9 +234,15 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.
 - When modifying persistence contract:
-  - keep `scripts/dev-server.mjs` and `functions/api/progress.js` behavior aligned.
+  - keep `scripts/dev-server.mjs`, `functions/api/progress.js`, and `scripts/migrate-progress-to-d1.mjs` behavior aligned.
+- When modifying control ids or HUD selectors:
+  - keep `web/index.html`, `web/src/app.js`, `web/tests/slot-popout.e2e.spec.mjs`, and `scripts/perf/load-metrics.mjs` aligned.
+- When modifying build/deploy behavior:
+  - keep `scripts/build-web.mjs`, `scripts/preview-web.mjs`, and `wrangler.toml` aligned.
 - When modifying map slots:
   - validate blocked-slot behavior and no-river-placement tests.
+- When modifying campaign thresholds or balance acceptance criteria:
+  - keep `web/src/config.js` and `scripts/balance-sim.mjs` aligned.
 - Diagnose failures by source before fixing:
   - local runtime bug,
   - CI/CD/deploy pipeline issue,
