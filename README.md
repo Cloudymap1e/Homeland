@@ -2,6 +2,33 @@
 
 Homeland is a tower defense strategy game where the player protects river routes from pirate fleets.
 
+## Current Runtime Snapshot
+
+- Runtime of record: browser JS campaign under `web/`, not the legacy Python prototype.
+- Live content: 5 playable maps, 5 tower types (`arrow`, `bone`, `magic_fire`, `magic_wind`, `magic_lightning`), 50 tower levels, branching river routes, sequential map unlocks.
+- Core runtime owners:
+  - configs and authored map/slot data: `web/src/config.js`
+  - game loop/state/economy/combat: `web/src/game-core.js`
+  - rendering/UI/HUD/persistence: `web/src/app.js`
+  - production progress API: `functions/api/progress.js`
+  - local dev progress API: `scripts/dev-server.mjs`
+- Persistence behavior:
+  - browser `localStorage` mirror plus remote `/api/progress`,
+  - session identity via `homeland_sid` cookie with client IP fallback,
+  - local dev storage in `.data/player-progress.json`,
+  - production storage in Cloudflare D1 via `PROGRESS_DB`.
+- Build/deploy path:
+  - `npm run build:web` creates hashed assets in `dist/`,
+  - `npm run preview:web` is static smoke only and stubs `/api/progress`,
+  - `npm run pages:dev` is the closer Pages/functions preview,
+  - `npm run pages:deploy` deploys the production bundle.
+- Balance/simulation path:
+  - Monte Carlo source: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`,
+  - optional GPU wave backend: `scripts/cuda/wave_sim.cu` via `npm run build:gpu-wave`,
+  - GS75 CUDA-first workflow is the expected path for full balance passes.
+
+For operational truth, prefer this snapshot plus [`AGENTS.md`](AGENTS.md) and current source owners. The sections below still include original design-brief material and may be less current than the runtime contract above.
+
 ## High-Level Concept
 
 - Player starts on the first map.
@@ -226,37 +253,38 @@ Runtime control additions:
 - `Fast 1s Fleet Run`: compresses an active wave into about one second of wall time.
 - `Auto Continue`: automatically starts the next wave and auto-loads unlocked next maps while carrying coins/XP.
 - `Tower Curves` panel: visualizes each tower's capability growth and cost growth across levels 1-50.
+- `Hide HUD`: toggles the overlay top-strip stats without hiding the command deck.
 
 Campaign progression additions:
 - Slots now require explicit unlock payment before towers can be placed.
 - Coins and XP carry forward across map transitions.
 - Each cleared map grants a clear reward (coins/XP).
 - Map unlocks are sequential (cannot skip earlier maps).
-- New playable map added: `Map 4 - Tide Lock`.
+- Current playable endpoint: `Map 5 - Blackwater Lattice`.
 
 Progress persistence:
 - Player progress now auto-saves continuously and on tab close.
 - Session identity is indexed by `homeland_sid` cookie, with client IP fallback if cookie is missing.
-- Data is stored server-side in `/Users/rc/Project/Homeland/.data/player-progress.json` and mirrored in browser `localStorage` as fallback.
+- Local dev data is stored in `.data/player-progress.json`; production data is stored in Cloudflare D1 and mirrored in browser `localStorage` as fallback.
 
 Run local web prototype:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run dev
 ```
 
 Run tests:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm test
 ```
 
 Monte Carlo balance run (1,000 simulations, all maps):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:sim
 ```
 
@@ -296,60 +324,60 @@ Scaling policy for future iterations:
 Fast 1,000-run verification only (skip multiplier search):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:verify
 ```
 
 Diversity + controlled-variable suite without search (faster):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:diversity
 ```
 
 Pass-standard framework only (retention baseline + fixed-budget pass-rate checks):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:standard
 ```
 
 GS75 CUDA-first balance run:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root on GS75
 npm run balance:gs75
 ```
 
 Quick CUDA availability check:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:cuda-check
 ```
 
 Native CUDA wave backend build (GS75):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root on GS75
 npm run build:gpu-wave
 ```
 
 GPU-engine sanity run (Map 1 quick suite):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run balance:gpu-check
 ```
 
 For direct CLI use, `balance-sim` accepts `--engine=classic|fast|gpu` (default `fast`).
 
-Legacy headless Python prototype remains under `/Users/rc/Project/Homeland/src/homeland` for reference.
+Legacy headless Python prototype remains under `src/homeland` for reference only.
 
 Load and startup performance harness:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run perf:load
 ```
 
@@ -360,9 +388,17 @@ This writes:
 Build optimized production assets (hashed JS/CSS + cache headers):
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run build:web
 npm run preview:web
+```
+
+For Pages Functions or persistence checks, prefer:
+
+```bash
+# from the repo root
+npm run build:web
+npm run pages:dev
 ```
 
 ## Cloudflare Pages + D1 (Primary Production Path)
@@ -372,7 +408,7 @@ Target hostname: `homeland.secana.top`
 Use the currently active `secana.top` Cloudflare zone. Do not change nameservers if the zone is already active.
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npx wrangler whoami
 npx wrangler d1 create homeland-progress
 # Update wrangler.toml with real database_id and preview_database_id values.
@@ -388,7 +424,7 @@ Pages runtime API:
 Progress migration to D1:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run migrate:d1 -- --db=homeland-progress --apply --verify --truncate
 ```
 
@@ -402,7 +438,7 @@ Migration script:
 Keep tunnel scripts available for rollback windows or emergency routing:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 ./scripts/cloudflare-tunnel-setup.sh
 npm run dev
 ./scripts/cloudflare-tunnel-run.sh
@@ -411,7 +447,7 @@ npm run dev
 Quick public URL without DNS mapping:
 
 ```bash
-cd /Users/rc/Project/Homeland
+# from the repo root
 npm run dev
 npm run tunnel:quick
 ```
