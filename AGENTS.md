@@ -34,8 +34,8 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
 - Build production web bundle: `npm run build:web`.
 - Preview built bundle: `npm run preview:web` (static smoke only; `/api/progress` is a stub that returns `progress: null`).
-- Preview built bundle with Pages runtime shim: `npm run pages:dev` (use this or deployed Pages for persistence/API validation).
-- Deploy to Cloudflare Pages: `npm run pages:deploy`.
+- Preview built bundle with Pages runtime shim: `npm run pages:dev` (use this or deployed Pages for persistence/API validation; rebuild `dist/` first).
+- Deploy to Cloudflare Pages: `npm run pages:deploy` (deploys the current `dist/`; do not skip a fresh `npm run build:web`).
 - Run D1 progress migration: `npm run migrate:d1`.
 - Run unit/system tests: `npm test`.
 - Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
@@ -81,6 +81,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - fallback mapping: client IP index.
 - Local dev persistence:
   - file-backed JSON at `.data/player-progress.json`,
+  - top-level store shape mirrors session lookup tables (`sessions`, `ipIndex`) used by production.
   - served by `scripts/dev-server.mjs`.
 - Production persistence:
   - Cloudflare Pages Function at `functions/api/progress.js`,
@@ -89,7 +90,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Client behavior (`web/src/app.js`):
   - loads local snapshot first, then remote with timeout-retry merge,
   - keeps local fallback if remote save fails,
-  - debounced + periodic save, plus unload keepalive save.
+  - debounced + periodic save, plus visibility/unload keepalive save (`sendBeacon` first, `POST` fallback).
 - DELETE behavior:
   - clears saved progress to `null`,
   - keeps the session row/session cookie intact instead of deleting the identity record.
@@ -99,12 +100,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - Build: `npm run build:web` (esbuild bundles app, fingerprints JS/CSS, and writes `dist/_headers` cache policy).
 - Preview dist: `npm run preview:web` (static artifact smoke only).
-- Preview Pages runtime: `npm run pages:dev` (functions + bindings shim).
-- Cloudflare Pages deploy: `npm run pages:deploy`.
+- Preview Pages runtime: `npm run pages:dev` (functions + bindings shim over current `dist/` output).
+- Cloudflare Pages deploy: `npm run pages:deploy` (publishes current `dist/` output).
 - Tunnel publish hostname requirement: `homeland.secana.top`.
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
   - run: `scripts/cloudflare-tunnel-run.sh`
+- `wrangler.toml` ships placeholder D1 IDs; live deploys require real `database_id` / `preview_database_id` values before persistence validation.
 - `dist/` is disposable output. Regenerate it from source rather than editing built files.
 - Avoid long-lived local serving for routine validation; prefer deploying to active staging/production target and verifying there.
 
@@ -117,13 +119,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Build slot coordinates are authoritative map data:
   - never auto-generate, densify, offset, or "fix up" slot coordinates at runtime.
 - Slot activation is required before building towers.
-- Build and upgrade are allowed during active waves.
-- Tower selling is enabled; refund is `70%` of total invested tower cost.
+- Slot activation, build, upgrade, and tower selling are allowed during active waves; `map_result` is the lockout state.
+- Tower selling refund is `70%` of total invested tower cost.
 - Boats do not attack towers in current scope.
 - Leak penalties reduce coins and XP (XP floors at 0).
 - Coins are allowed to go negative during failed waves; run remains resumable.
 - Recovery guard exists for fresh-run soft lock:
-  - if run is fresh, no towers, and coins `<= 0`, economy resets to map starting coins.
+  - browser runtime behavior: if run is fresh, no towers, and coins `<= 0`, economy resets to map starting coins.
 - Final-wave leaks force map defeat (`reason: leaks`); no-leak full clear grants map rewards and unlock checks.
 
 ## Config-First Balancing Rules
@@ -137,8 +139,13 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 ## Simulation Parity Contract
 
-- `scripts/fast-game-core.mjs` is the data-oriented simulation mirror of `web/src/game-core.js` used by Monte Carlo runs.
+- `scripts/fast-game-core.mjs` is the data-oriented simulation mirror for combat/economy/wave-resolution semantics from `web/src/game-core.js` used by Monte Carlo runs; it is not a full clone of browser UI, persistence, or import/export plumbing.
+- `scripts/balance-sim.mjs` supports `--engine=classic|fast|gpu`:
+  - `classic`: browser `HomelandGame` reference path,
+  - `fast`: default data-oriented simulator,
+  - `gpu`: fast simulator with native CUDA wave-resolution sidecar.
 - `scripts/gpu-wave-runner.mjs` and `scripts/cuda/wave_sim.cu` are the optional native wave-resolution path used by `--engine=gpu`.
+- Fresh-run zero-coin recovery is currently a browser runtime guard in `web/src/game-core.js`; current Monte Carlo flows start from map starting coins and do not depend on it. If a simulator path can enter that state, port the rule deliberately.
 - When changing combat math, wave resolution, leak penalties, slot rules, economy flow, or map unlock semantics, explicitly decide whether the change affects:
   - browser runtime only,
   - fast simulator parity,
@@ -189,8 +196,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ## Tests and Verification
 
 - Unit/system tests: `npm test` (Node test runner over `web/tests/*.test.mjs`).
-- E2E regression: `npm run test:e2e` (Playwright).
+- E2E regression: `npm run test:e2e` (Playwright against a real runtime surface).
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
+- Prefer deployed/staging targets via `HOMELAND_E2E_BASE_URL` for runtime verification; only fall back to the local dev server when explicitly necessary.
 - Performance/load metrics: `npm run perf:load`.
   - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
   - override with `--urls=<comma-separated URLs>` when validating specific environments.
@@ -204,7 +212,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ## Agent Workflow Rules
 
 - Keep commits small and focused; commit and push frequently.
-- Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
+- Use `<Type>: <summary>` commit messages.
+- Preferred prefixes for new work: `Fix`, `Feature`, `Docs`, `Perf`, `Deploy`, `Test`, `Balance`.
+- Historical history also contains `UI`, `UX`, `Visual`, `Tooling`, `Chore`, `Plan`, `Prototype`, and `Improve`; do not rewrite old commits, but prefer the canonical set above for new work unless another prefix is materially clearer.
 - Validate commit-message hygiene against recent history before finalizing a docs/process-only run.
 - Do not run long-lived local servers unless explicitly necessary for the requested task.
 - Prefer deployed target verification for runtime checks; do not rely on prolonged local-host sessions.

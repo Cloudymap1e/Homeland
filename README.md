@@ -16,16 +16,21 @@ Homeland is a tower defense strategy game where the player protects river routes
   - browser `localStorage` mirror plus remote `/api/progress`,
   - session identity via `homeland_sid` cookie with client IP fallback,
   - local dev storage in `.data/player-progress.json`,
-  - production storage in Cloudflare D1 via `PROGRESS_DB`.
+  - production storage in Cloudflare D1 via `PROGRESS_DB`,
+  - debounced/periodic saves plus unload keepalive flush.
 - Build/deploy path:
   - `npm run build:web` creates hashed assets in `dist/`,
   - `npm run preview:web` is static smoke only and stubs `/api/progress`,
-  - `npm run pages:dev` is the closer Pages/functions preview,
-  - `npm run pages:deploy` deploys the production bundle.
+  - `npm run pages:dev` is the closer Pages/functions preview and expects a fresh `dist/`,
+  - `npm run pages:deploy` deploys the current production bundle from `dist/`.
 - Balance/simulation path:
   - Monte Carlo source: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`,
+  - `balance-sim` supports `--engine=classic|fast|gpu` (`fast` default, `classic` browser reference),
   - optional GPU wave backend: `scripts/cuda/wave_sim.cu` via `npm run build:gpu-wave`,
   - GS75 CUDA-first workflow is the expected path for full balance passes.
+- Runtime verification:
+  - `npm run test:e2e` supports `HOMELAND_E2E_BASE_URL`,
+  - prefer deployed/staging targets over long-lived local servers for persistence/runtime checks.
 
 For operational truth, prefer this snapshot plus [`AGENTS.md`](AGENTS.md) and current source owners. The sections below still include original design-brief material and may be less current than the runtime contract above.
 
