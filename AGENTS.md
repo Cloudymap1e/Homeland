@@ -13,6 +13,8 @@ This file defines the operational contract for agents working in Homeland. Follo
 
 ## Source of Truth
 
+- Command deck shell, HUD window containers, and control IDs: `web/index.html`.
+- Layout, window/popout styling, and responsive shell visuals: `web/styles.css`.
 - Gameplay/balance configs and map authored coordinates: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
 - Rendering/UI/HUD/persistence orchestration: `web/src/app.js`.
@@ -26,19 +28,20 @@ This file defines the operational contract for agents working in Homeland. Follo
 - Load/startup performance harness: `scripts/perf/load-metrics.mjs`.
 - Production config and bindings: `wrangler.toml`.
 - Progress migration tooling: `scripts/migrate-progress-to-d1.mjs`.
+- Script entry-point authority: `package.json`.
 
 Do not invent parallel gameplay configs or duplicate rule constants outside these owners. Do not hand-edit generated artifacts under `dist/`, local persistence under `.data/`, or perf outputs under `docs/perf/` unless the task explicitly targets those files.
 
 ## Execution Entry Points
 
 - Local static + dev progress API (only when explicitly needed): `npm run dev` (`scripts/dev-server.mjs`, serves on `127.0.0.1:4173`).
-- Build production web bundle: `npm run build:web`.
+- Build production web bundle: `npm run build:web` (required before `npm run pages:dev` or `npm run pages:deploy`; those commands use the current `dist/` as-is).
 - Preview built bundle: `npm run preview:web` (static smoke only; `/api/progress` is a stub that returns `progress: null`).
-- Preview built bundle with Pages runtime shim: `npm run pages:dev` (use this or deployed Pages for persistence/API validation).
-- Deploy to Cloudflare Pages: `npm run pages:deploy`.
-- Run D1 progress migration: `npm run migrate:d1`.
+- Preview built bundle with Pages runtime shim: `npm run pages:dev` (uses prebuilt `dist/`; use this or deployed Pages for persistence/API validation).
+- Deploy to Cloudflare Pages: `npm run pages:deploy` (does not run `build:web` for you).
+- Run D1 progress migration: `npm run migrate:d1` (dry-run SQL generation by default; use script flags for `--apply`, `--db`, `--truncate`, `--verify`).
 - Run unit/system tests: `npm test`.
-- Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override).
+- Run E2E regression: `npm run test:e2e` (supports `HOMELAND_E2E_BASE_URL` override and expects a target already serving the app plus `/api/progress`).
 - Run load/perf harness: `npm run perf:load`.
 - Build native GPU wave backend binary: `npm run build:gpu-wave`.
 - Tunnel fallback commands: `npm run tunnel:quick`, `npm run tunnel:run`.
@@ -50,13 +53,18 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - `web/index.html` defines the command deck and HUD controls:
   - map select, reset run, start wave, speed toggle, fast-forward, auto waves,
   - report panel toggle, curve panel toggle, overlay HUD toggle.
+- `web/styles.css` owns:
+  - full-screen stage shell and canvas sizing,
+  - command deck layout and responsive breakpoints,
+  - report/curve window styling, slot-popout visuals, and HUD overlay presentation.
 - `web/src/app.js` owns:
   - frame loop and rendering layers,
   - fast/static terrain layer cache and deferred full-quality redraws,
   - slot-popout interactions (activate/build/upgrade/sell),
   - fast-forward wave compression and auto-continue flow,
   - draggable/closable report and curve windows plus overlay HUD visibility,
-  - persistence bootstrap/merge across local + remote progress stores.
+  - persistence bootstrap/merge across local + remote progress stores,
+  - local browser save mirror under `homeland_progress_v1`.
 - `web/src/game-core.js` owns:
   - state machine (`build_phase`, `wave_running`, `wave_result`, `map_result`),
   - tower placement/upgrade/sell and slot activation,
@@ -69,10 +77,11 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ### Persistence and Progress Contract
 
 - Endpoint: `/api/progress` (GET/PUT/POST/DELETE).
+- Browser-local mirror: `localStorage['homeland_progress_v1']`.
 - Persisted payload shape:
-  - root fields: `version`, `updatedAt`, `autoContinueEnabled`, `selectedTowerId`, `selectedCurveTowerId`,
+  - root fields: `version` (`1`), `updatedAt` (`Date.now()` epoch ms), `autoContinueEnabled`, `selectedTowerId`, `selectedCurveTowerId`,
   - UI prefs: `reportPanelVisible`, `curvePanelVisible`, `overlayHudVisible`,
-  - run state: nested `game` object from `HomelandGame.exportState()`.
+  - run state: nested `game` object from `HomelandGame.exportState()` with `game.version === 1`.
 - Request payload contract for PUT/POST:
   - body must be a JSON object (arrays/scalars rejected),
   - body size limit is `1,000,000` bytes (dev + Pages function parity).
@@ -81,15 +90,16 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - fallback mapping: client IP index.
 - Local dev persistence:
   - file-backed JSON at `.data/player-progress.json`,
+  - store shape: top-level `version`, `sessions`, `ipIndex`,
   - served by `scripts/dev-server.mjs`.
 - Production persistence:
   - Cloudflare Pages Function at `functions/api/progress.js`,
   - D1 binding `PROGRESS_DB`,
   - tables `sessions` and `ip_index` from `schema/progress.sql`.
 - Client behavior (`web/src/app.js`):
-  - loads local snapshot first, then remote with timeout-retry merge,
+  - loads local snapshot first, then remote with fast-timeout + slow-retry merge,
   - keeps local fallback if remote save fails,
-  - debounced + periodic save, plus unload keepalive save.
+  - debounced (`420ms`) + periodic (`1500ms`) save, plus unload/hidden-state keepalive save.
 - DELETE behavior:
   - clears saved progress to `null`,
   - keeps the session row/session cookie intact instead of deleting the identity record.
@@ -97,10 +107,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 ### Build and Deploy Path
 
-- Build: `npm run build:web` (esbuild bundles app, fingerprints JS/CSS, and writes `dist/_headers` cache policy).
+- Build: `npm run build:web` (wipes `dist/`, esbuild-bundles `web/src/app.js`, fingerprints JS/CSS, rewrites `dist/index.html`, and writes `dist/_headers` cache policy).
 - Preview dist: `npm run preview:web` (static artifact smoke only).
-- Preview Pages runtime: `npm run pages:dev` (functions + bindings shim).
-- Cloudflare Pages deploy: `npm run pages:deploy`.
+- Preview Pages runtime: `npm run pages:dev` (functions + bindings shim over the already-built `dist/`).
+- Cloudflare Pages deploy: `npm run pages:deploy` (publishes the already-built `dist/`; rebuild first or you will deploy stale assets).
 - Tunnel publish hostname requirement: `homeland.secana.top`.
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
@@ -189,7 +199,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 ## Tests and Verification
 
 - Unit/system tests: `npm test` (Node test runner over `web/tests/*.test.mjs`).
+- Current unit coverage file: `web/tests/game-core.test.mjs` for economy flow, active-wave build/upgrade, blocked river slots, leak-resume behavior, negative-coin continuation, sell refund, and tower-effect semantics.
 - E2E regression: `npm run test:e2e` (Playwright).
+- Current E2E coverage file: `web/tests/slot-popout.e2e.spec.mjs` for slot-popout activation/build/upgrade, resumable failed-wave progress bootstrap, and sell-flow refund behavior.
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
 - Performance/load metrics: `npm run perf:load`.
   - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
@@ -206,9 +218,12 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Keep commits small and focused; commit and push frequently.
 - Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
 - Validate commit-message hygiene against recent history before finalizing a docs/process-only run.
+- Before `npm run pages:dev` or `npm run pages:deploy`, rebuild `dist/` with `npm run build:web`; do not trust stale output.
 - Do not run long-lived local servers unless explicitly necessary for the requested task.
 - Prefer deployed target verification for runtime checks; do not rely on prolonged local-host sessions.
 - Do not modify legacy Python prototype for gameplay features unless user explicitly asks.
+- Treat `package.json` scripts as the execution source of truth when older docs conflict.
+- When changing top-control buttons, HUD windows, or slot-popout interactions, keep `web/index.html`, `web/styles.css`, and `web/src/app.js` aligned in the same work stream.
 - Treat `docs/prototype-design.md`, `docs/action-plan.md`, `docs/task-list.md`, and `docs/design-graphics-plan.md` as planning references, not runtime contracts.
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.

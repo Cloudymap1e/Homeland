@@ -7,6 +7,8 @@ Homeland is a tower defense strategy game where the player protects river routes
 - Runtime of record: browser JS campaign under `web/`, not the legacy Python prototype.
 - Live content: 5 playable maps, 5 tower types (`arrow`, `bone`, `magic_fire`, `magic_wind`, `magic_lightning`), 50 tower levels, branching river routes, sequential map unlocks.
 - Core runtime owners:
+  - command deck shell + HUD containers: `web/index.html`
+  - layout/window styling: `web/styles.css`
   - configs and authored map/slot data: `web/src/config.js`
   - game loop/state/economy/combat: `web/src/game-core.js`
   - rendering/UI/HUD/persistence: `web/src/app.js`
@@ -18,10 +20,10 @@ Homeland is a tower defense strategy game where the player protects river routes
   - local dev storage in `.data/player-progress.json`,
   - production storage in Cloudflare D1 via `PROGRESS_DB`.
 - Build/deploy path:
-  - `npm run build:web` creates hashed assets in `dist/`,
+  - `npm run build:web` recreates `dist/` with hashed assets,
   - `npm run preview:web` is static smoke only and stubs `/api/progress`,
-  - `npm run pages:dev` is the closer Pages/functions preview,
-  - `npm run pages:deploy` deploys the production bundle.
+  - `npm run pages:dev` is the closer Pages/functions preview and uses the current `dist/`,
+  - `npm run pages:deploy` deploys the current `dist/` and does not build first.
 - Balance/simulation path:
   - Monte Carlo source: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`,
   - optional GPU wave backend: `scripts/cuda/wave_sim.cu` via `npm run build:gpu-wave`,
