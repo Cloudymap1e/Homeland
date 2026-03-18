@@ -81,7 +81,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - fallback mapping: client IP index.
 - Local dev persistence:
   - file-backed JSON at `.data/player-progress.json`,
-  - top-level store shape mirrors session lookup tables (`sessions`, `ipIndex`) used by production.
+  - top-level store shape mirrors the production session lookup entities (`sessions`, `ip_index`), with local JSON using `ipIndex` for the IP map.
   - served by `scripts/dev-server.mjs`.
 - Production persistence:
   - Cloudflare Pages Function at `functions/api/progress.js`,
