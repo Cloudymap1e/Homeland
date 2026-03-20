@@ -7,11 +7,11 @@ Homeland is a tower defense strategy game where the player protects river routes
 - Runtime of record: browser JS campaign under `web/`, not the legacy Python prototype.
 - Live content: 5 playable maps, 5 tower types (`arrow`, `bone`, `magic_fire`, `magic_wind`, `magic_lightning`), 50 tower levels, branching river routes, sequential map unlocks.
 - Core runtime owners:
-  - command deck shell + HUD containers: `web/index.html`
+  - command deck shell + map-meta/HUD containers: `web/index.html`
   - layout/window styling: `web/styles.css`
-  - configs and authored map/slot data: `web/src/config.js`
+  - configs, authored map/slot data, fleet targets, clear rewards, and pass-criteria metadata: `web/src/config.js`
   - game loop/state/economy/combat: `web/src/game-core.js`
-  - rendering/UI/HUD/persistence: `web/src/app.js`
+  - rendering/UI/HUD/persistence and map-meta presentation: `web/src/app.js`
   - production progress API: `functions/api/progress.js`
   - local dev progress API: `scripts/dev-server.mjs`
 - Persistence behavior:
@@ -26,6 +26,7 @@ Homeland is a tower defense strategy game where the player protects river routes
   - `npm run pages:deploy` deploys the current `dist/` and does not build first.
 - Balance/simulation path:
   - Monte Carlo source: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`,
+  - keep campaign pass-standard targets aligned between `web/src/config.js` and `scripts/balance-sim.mjs`,
   - optional GPU wave backend: `scripts/cuda/wave_sim.cu` via `npm run build:gpu-wave`,
   - GS75 CUDA-first workflow is the expected path for full balance passes.
 

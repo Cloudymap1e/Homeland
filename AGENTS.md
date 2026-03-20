@@ -13,21 +13,21 @@ This file defines the operational contract for agents working in Homeland. Follo
 
 ## Source of Truth
 
-- Command deck shell, HUD window containers, and control IDs: `web/index.html`.
+- Command deck shell, map-meta summary strip, HUD window containers, slot-popout mount, and control IDs: `web/index.html`.
 - Layout, window/popout styling, and responsive shell visuals: `web/styles.css`.
-- Gameplay/balance configs and map authored coordinates: `web/src/config.js`.
+- Gameplay/balance configs, authored map coordinates, map clear rewards, fleet targets, and campaign pass-criteria metadata: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
-- Rendering/UI/HUD/persistence orchestration: `web/src/app.js`.
+- Rendering/UI/HUD/persistence orchestration, map-meta text, and slot/range interactions: `web/src/app.js`.
 - Production progress API (Cloudflare Pages Functions + D1): `functions/api/progress.js`.
 - Local dev progress API emulation + static server: `scripts/dev-server.mjs`.
 - D1 schema: `schema/progress.sql`.
 - Production bundle generation and cache headers: `scripts/build-web.mjs`.
 - Static dist smoke preview (stubbed `/api/progress`): `scripts/preview-web.mjs`.
-- Monte Carlo and balance validation: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`.
+- Monte Carlo balance validation, policy suites, and pass-standard criteria probes: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`.
 - CUDA wave backend: `scripts/cuda/wave_sim.cu`, `scripts/gpu-wave-runner.mjs`, `scripts/build-gpu-wave-sim.sh`.
-- Load/startup performance harness: `scripts/perf/load-metrics.mjs`.
+- Load/startup performance harness and dated baseline output generation: `scripts/perf/load-metrics.mjs`.
 - Production config and bindings: `wrangler.toml`.
-- Progress migration tooling: `scripts/migrate-progress-to-d1.mjs`.
+- Progress migration SQL generation/apply/verify tooling: `scripts/migrate-progress-to-d1.mjs`.
 - Script entry-point authority: `package.json`.
 
 Do not invent parallel gameplay configs or duplicate rule constants outside these owners. Do not hand-edit generated artifacts under `dist/`, local persistence under `.data/`, or perf outputs under `docs/perf/` unless the task explicitly targets those files.
@@ -52,7 +52,8 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - `web/index.html` defines the command deck and HUD controls:
   - map select, reset run, start wave, speed toggle, fast-forward, auto waves,
-  - report panel toggle, curve panel toggle, overlay HUD toggle.
+  - report panel toggle, curve panel toggle, overlay HUD toggle,
+  - map-meta summary strip, report window, curve window, slot-popout mount.
 - `web/styles.css` owns:
   - full-screen stage shell and canvas sizing,
   - command deck layout and responsive breakpoints,
@@ -60,7 +61,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - `web/src/app.js` owns:
   - frame loop and rendering layers,
   - fast/static terrain layer cache and deferred full-quality redraws,
+  - map select option labels and map-meta pass-standard text from config metadata,
   - slot-popout interactions (activate/build/upgrade/sell),
+  - tower range preview selection sync,
   - fast-forward wave compression and auto-continue flow,
   - draggable/closable report and curve windows plus overlay HUD visibility,
   - persistence bootstrap/merge across local + remote progress stores,
@@ -85,6 +88,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Request payload contract for PUT/POST:
   - body must be a JSON object (arrays/scalars rejected),
   - body size limit is `1,000,000` bytes (dev + Pages function parity).
+- Response contract:
+  - GET returns `{ ok, sessionId, progress }`,
+  - PUT/POST returns `{ ok, sessionId, updatedAt }`,
+  - DELETE returns `{ ok, sessionId }`.
 - Session identity:
   - primary: `homeland_sid` cookie,
   - fallback mapping: client IP index.
@@ -97,9 +104,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - D1 binding `PROGRESS_DB`,
   - tables `sessions` and `ip_index` from `schema/progress.sql`.
 - Client behavior (`web/src/app.js`):
-  - loads local snapshot first, then remote with fast-timeout + slow-retry merge,
+  - loads local snapshot first, then remote with `1200ms` fast-timeout + slow-retry merge,
   - keeps local fallback if remote save fails,
-  - debounced (`420ms`) + periodic (`1500ms`) save, plus unload/hidden-state keepalive save.
+  - debounced (`420ms`) + periodic (`1500ms`) save, plus unload/hidden-state keepalive save via `sendBeacon` or fetch keepalive fallback.
 - DELETE behavior:
   - clears saved progress to `null`,
   - keeps the session row/session cookie intact instead of deleting the identity record.
@@ -144,6 +151,25 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - wave composition/spawn interval,
   - map leak penalties and slot activation economics.
 - Avoid frequent tower-curve rewrites unless a tower role is fundamentally broken.
+
+## Campaign Metadata Contract
+
+- `web/src/config.js` also owns map-facing campaign metadata:
+  - `fleetTarget`,
+  - `mapClearReward`,
+  - per-map `passCriteria`,
+  - global `CAMPAIGN_INFO`,
+  - global `CAMPAIGN_PASS_CRITERIA`.
+- `web/src/app.js` consumes that metadata for:
+  - map select labels (`waves / boats / Open|Locked|Cleared`),
+  - command-deck map-meta summary text,
+  - HUD-adjacent pass-standard presentation.
+- `scripts/balance-sim.mjs` maintains the simulator-side equivalents for:
+  - unlock run targets,
+  - fail-penalty run equivalent,
+  - retention probe counts,
+  - MC pass-rate targets.
+- When changing campaign pass standards or probe counts, update `web/src/config.js`, `web/src/app.js`, and `scripts/balance-sim.mjs` in the same work stream so the HUD, docs, and simulator do not drift.
 
 ## Simulation Parity Contract
 
@@ -205,7 +231,8 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - E2E base URL override supported with `HOMELAND_E2E_BASE_URL`.
 - Performance/load metrics: `npm run perf:load`.
   - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
-  - override with `--urls=<comma-separated URLs>` when validating specific environments.
+  - override with `--urls=<comma-separated URLs>` when validating specific environments,
+  - writes dated `load-metrics-YYYYMMDD.json` and baseline JSON under `docs/perf/` unless `--no-baseline` is used.
 - `npm run preview:web` is not a persistence/API test surface; use `npm run pages:dev` or deployed Pages when the request touches `/api/progress`.
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
@@ -228,9 +255,11 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.
 - When modifying persistence contract:
-  - keep `scripts/dev-server.mjs` and `functions/api/progress.js` behavior aligned.
+  - keep `scripts/dev-server.mjs`, `functions/api/progress.js`, and `web/src/app.js` hydrate/save expectations aligned.
 - When modifying persisted payload shape:
   - keep localStorage merge/bootstrap behavior backward compatible or bump the persistence version deliberately across client and server code paths.
+- When modifying campaign pass criteria, map-meta messaging, or unlock-run standards:
+  - keep `web/src/config.js`, `web/src/app.js`, and `scripts/balance-sim.mjs` aligned.
 - When modifying gameplay semantics used by Monte Carlo:
   - keep `scripts/fast-game-core.mjs` aligned with `web/src/game-core.js`,
   - touch GPU parity files when `--engine=gpu` should continue to represent the same rules.
