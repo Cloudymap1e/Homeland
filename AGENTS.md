@@ -17,7 +17,7 @@ This file defines the operational contract for agents working in Homeland. Follo
 - Layout, window/popout styling, and responsive shell visuals: `web/styles.css`.
 - Gameplay/balance configs, authored map coordinates, map clear rewards, fleet targets, and campaign pass-criteria metadata: `web/src/config.js`.
 - Runtime game loop/state machine: `web/src/game-core.js`.
-- Rendering/UI/HUD/persistence orchestration, map-meta text, and slot/range interactions: `web/src/app.js`.
+- Rendering/UI/HUD/persistence orchestration, map-meta text, map switching/reset flow, draggable window behavior, and slot/range interactions: `web/src/app.js`.
 - Production progress API (Cloudflare Pages Functions + D1): `functions/api/progress.js`.
 - Local dev progress API emulation + static server: `scripts/dev-server.mjs`.
 - D1 schema: `schema/progress.sql`.
@@ -85,6 +85,10 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - root fields: `version` (`1`), `updatedAt` (`Date.now()` epoch ms), `autoContinueEnabled`, `selectedTowerId`, `selectedCurveTowerId`,
   - UI prefs: `reportPanelVisible`, `curvePanelVisible`, `overlayHudVisible`,
   - run state: nested `game` object from `HomelandGame.exportState()` with `game.version === 1`.
+- Timestamp semantics:
+  - client-authored progress snapshots keep `updatedAt` as epoch milliseconds,
+  - `functions/api/progress.js` / `scripts/dev-server.mjs` return response-level `updatedAt` metadata as ISO strings,
+  - remote merge order in `web/src/app.js` compares the stored payload `updatedAt`, not the PUT/POST response metadata.
 - Request payload contract for PUT/POST:
   - body must be a JSON object (arrays/scalars rejected),
   - body size limit is `1,000,000` bytes (dev + Pages function parity).
@@ -118,6 +122,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Preview dist: `npm run preview:web` (static artifact smoke only).
 - Preview Pages runtime: `npm run pages:dev` (functions + bindings shim over the already-built `dist/`).
 - Cloudflare Pages deploy: `npm run pages:deploy` (publishes the already-built `dist/`; rebuild first or you will deploy stale assets).
+- `wrangler.toml` is authoritative for Pages/D1 bindings; replace placeholder `database_id` / `preview_database_id` values before treating D1-backed preview/deploy validation as real.
 - Tunnel publish hostname requirement: `homeland.secana.top`.
 - Tunnel scripts:
   - setup: `scripts/cloudflare-tunnel-setup.sh`
@@ -142,6 +147,19 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Recovery guard exists for fresh-run soft lock:
   - if run is fresh, no towers, and coins `<= 0`, economy resets to map starting coins.
 - Final-wave leaks force map defeat (`reason: leaks`); no-leak full clear grants map rewards and unlock checks.
+
+## Campaign Flow and Map Switching
+
+- Unlock gating is sequential:
+  - map `N+1` only becomes playable after prior maps are completed in order and total XP meets the previous map's `unlockRequirement.minXp`.
+- `HomelandGame.setMap()` rejects locked maps unless `ignoreUnlock` is explicitly requested.
+- Victory auto-advance uses `setMap(nextMapId, { carryResources: true })` from `web/src/app.js`.
+- Carry-resource map switching preserves positive coins/XP, but clamps negative carry values to `0`.
+- Fresh-run recovery still applies after carry-resource map switching:
+  - if the destination map starts with no towers and coins `<= 0`, `web/src/game-core.js` restores that map's starting coins.
+- Persistence import/export must preserve active-wave resumability:
+  - `exportState()` captures active enemies, queue, towers, fire zones, unlock state, and current result/stat counters,
+  - `importState()` sanitizes malformed entities, re-applies unlocks, and restores fresh-run economy if the payload would otherwise soft-lock the player.
 
 ## Config-First Balancing Rules
 
@@ -175,6 +193,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - `scripts/fast-game-core.mjs` is the data-oriented simulation mirror of `web/src/game-core.js` used by Monte Carlo runs.
 - `scripts/gpu-wave-runner.mjs` and `scripts/cuda/wave_sim.cu` are the optional native wave-resolution path used by `--engine=gpu`.
+- GPU runner default binary path is `scripts/cuda/bin/wave_sim`; override only via `HOMELAND_GPU_WAVE_BIN` when needed.
 - When changing combat math, wave resolution, leak penalties, slot rules, economy flow, or map unlock semantics, explicitly decide whether the change affects:
   - browser runtime only,
   - fast simulator parity,
@@ -233,6 +252,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
   - default comparison targets: `http://127.0.0.1:4173` and `https://homeland.secana.top`,
   - override with `--urls=<comma-separated URLs>` when validating specific environments,
   - writes dated `load-metrics-YYYYMMDD.json` and baseline JSON under `docs/perf/` unless `--no-baseline` is used.
+- Perf harness selectors/resources are contract-sensitive:
+  - `scripts/perf/load-metrics.mjs` waits for `#coins-overlay`, `#map-overlay`, and `#state-overlay`,
+  - it also probes startup resource timing for `/src/app.js`, `/src/game-core.js`, `/src/config.js`, `/styles.css`, `/assets/`, and `/api/progress`.
 - `npm run preview:web` is not a persistence/API test surface; use `npm run pages:dev` or deployed Pages when the request touches `/api/progress`.
 - For persistence changes, validate both:
   - local dev API flow (`scripts/dev-server.mjs`),
@@ -244,6 +266,9 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 
 - Keep commits small and focused; commit and push frequently.
 - Every commit message must clearly describe intent (`Fix: ...`, `Feature: ...`, `Docs: ...`, `Perf: ...`, `Deploy: ...`).
+- Prefer the typed prefixes already established in recent history:
+  - `Fix`, `Feature`, `Docs`, `Test`, `Perf`, `Deploy`, `UI`, `UX`, `Balance`, `Tooling`, `Visual`,
+  - avoid vague subjects like `Chore` or `Improve` when a more specific prefix fits.
 - Validate commit-message hygiene against recent history before finalizing a docs/process-only run.
 - Before `npm run pages:dev` or `npm run pages:deploy`, rebuild `dist/` with `npm run build:web`; do not trust stale output.
 - Do not run long-lived local servers unless explicitly necessary for the requested task.
@@ -251,6 +276,7 @@ Do not invent parallel gameplay configs or duplicate rule constants outside thes
 - Do not modify legacy Python prototype for gameplay features unless user explicitly asks.
 - Treat `package.json` scripts as the execution source of truth when older docs conflict.
 - When changing top-control buttons, HUD windows, or slot-popout interactions, keep `web/index.html`, `web/styles.css`, and `web/src/app.js` aligned in the same work stream.
+- When changing HUD/control IDs, overlay selectors, or boot-time visible stats, keep `web/index.html`, `web/src/app.js`, `web/tests/slot-popout.e2e.spec.mjs`, and `scripts/perf/load-metrics.mjs` aligned in the same work stream.
 - Treat `docs/prototype-design.md`, `docs/action-plan.md`, `docs/task-list.md`, and `docs/design-graphics-plan.md` as planning references, not runtime contracts.
 - When changing gameplay rules or architecture contracts:
   - update this file and `README.md` in the same work stream.

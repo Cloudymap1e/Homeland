@@ -17,18 +17,23 @@ Homeland is a tower defense strategy game where the player protects river routes
 - Persistence behavior:
   - browser `localStorage` mirror plus remote `/api/progress`,
   - session identity via `homeland_sid` cookie with client IP fallback,
+  - client merge order uses the stored progress payload `updatedAt` epoch timestamp rather than the API response metadata timestamp,
   - local dev storage in `.data/player-progress.json`,
   - production storage in Cloudflare D1 via `PROGRESS_DB`.
 - Build/deploy path:
   - `npm run build:web` recreates `dist/` with hashed assets,
   - `npm run preview:web` is static smoke only and stubs `/api/progress`,
   - `npm run pages:dev` is the closer Pages/functions preview and uses the current `dist/`,
-  - `npm run pages:deploy` deploys the current `dist/` and does not build first.
+  - `npm run pages:deploy` deploys the current `dist/` and does not build first,
+  - `wrangler.toml` must be populated with real D1 `database_id` and `preview_database_id` values before D1-backed validation or deploy is treated as authoritative.
 - Balance/simulation path:
   - Monte Carlo source: `scripts/balance-sim.mjs` + `scripts/fast-game-core.mjs`,
   - keep campaign pass-standard targets aligned between `web/src/config.js` and `scripts/balance-sim.mjs`,
   - optional GPU wave backend: `scripts/cuda/wave_sim.cu` via `npm run build:gpu-wave`,
   - GS75 CUDA-first workflow is the expected path for full balance passes.
+- Operational guardrails:
+  - if HUD/control IDs or boot-time overlay selectors change, keep `web/index.html`, `web/src/app.js`, `web/tests/slot-popout.e2e.spec.mjs`, and `scripts/perf/load-metrics.mjs` aligned,
+  - keep commit subjects in the existing typed style (`Fix`, `Feature`, `Docs`, `Test`, `Perf`, `Deploy`, `UI`, `UX`, `Balance`, `Tooling`, `Visual`) instead of vague catch-all prefixes.
 
 For operational truth, prefer this snapshot plus [`AGENTS.md`](AGENTS.md) and current source owners. The sections below still include original design-brief material and may be less current than the runtime contract above.
 
